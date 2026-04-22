@@ -121,7 +121,7 @@ public class QueryCompiler {
             if (subFields instanceof Map<?, ?> subMap) {
                 for (Map.Entry<?, ?> sub : subMap.entrySet()) {
                     if (sub.getValue() instanceof Map<?, ?> subDef
-                            && Objects.equals(((Map<?, ?>) subDef).get("type"), type)) {
+                            && Objects.equals((subDef).get("type"), type)) {
                         out.add(path + "." + sub.getKey());
                     }
                 }
