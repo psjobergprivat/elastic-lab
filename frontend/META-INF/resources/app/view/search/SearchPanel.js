@@ -57,21 +57,16 @@ Ext.define('ElasticLab.view.search.SearchPanel', {
     runSearch: function () {
         var view = this,
             text = view.down('#queryField').getValue(),
-            grid = view.down('#resultsGrid'),
-            body = text
-                ? { query: { query_string: { query: text } } }
-                : { query: { match_all: {} } };
+            grid = view.down('#resultsGrid');
 
         Ext.Ajax.request({
             url: '/api/search',
             method: 'POST',
-            jsonData: body,
+            jsonData: { text: text || '' },
             success: function (response) {
                 var payload = Ext.decode(response.responseText),
-                    hits = (payload && payload.hits && payload.hits.hits) || [];
-                grid.getStore().loadData(hits.map(function (hit) {
-                    return { id: hit._id, score: hit._score, source: hit._source };
-                }));
+                    hits = (payload && payload.hits) || [];
+                grid.getStore().loadData(hits);
             },
             failure: function (response) {
                 Ext.Msg.alert('Search failed', response.responseText || 'Unknown error');

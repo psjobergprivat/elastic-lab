@@ -1,43 +1,59 @@
 package com.elasticlab.elasticsearch;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import co.elastic.clients.elasticsearch.ElasticsearchClient;
+import co.elastic.clients.elasticsearch._types.Refresh;
+import co.elastic.clients.elasticsearch._types.query_dsl.Query;
+import co.elastic.clients.elasticsearch.core.DeleteResponse;
+import co.elastic.clients.elasticsearch.core.IndexResponse;
+import co.elastic.clients.elasticsearch.core.SearchResponse;
+import co.elastic.clients.elasticsearch.core.search.Hit;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import org.elasticsearch.client.Request;
-import org.elasticsearch.client.Response;
-import org.elasticsearch.client.RestClient;
 
 import java.io.IOException;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 
 @ApplicationScoped
 public class ElasticsearchGateway {
 
     @Inject
-    RestClient restClient;
+    ElasticsearchClient client;
 
-    @Inject
-    ObjectMapper objectMapper;
+    public SearchHits search(String indexName, Query query, int size) throws IOException {
+        SearchResponse<Map> response = client.search(request -> request
+                        .index(indexName)
+                        .size(size)
+                        .query(query),
+                Map.class);
 
-    public JsonNode search(String indexName, JsonNode query) throws IOException {
-        Request request = new Request("POST", "/" + indexName + "/_search");
-        request.setJsonEntity(objectMapper.writeValueAsString(query));
-        return executeAndReadJson(request);
+        long total = response.hits().total() != null ? response.hits().total().value() : 0L;
+        List<SearchHit> hits = response.hits().hits().stream()
+                .map(this::toSearchHit)
+                .toList();
+        return new SearchHits(total, hits);
     }
 
-    public JsonNode indexDocument(String indexName, JsonNode document) throws IOException {
-        Request request = new Request("POST", "/" + indexName + "/_doc?refresh=wait_for");
-        request.setJsonEntity(objectMapper.writeValueAsString(document));
-        return executeAndReadJson(request);
+    public IndexResult indexDocument(String indexName, Map<String, Object> document) throws IOException {
+        IndexResponse response = client.index(request -> request
+                .index(indexName)
+                .document(document)
+                .refresh(Refresh.WaitFor));
+        return new IndexResult(response.id());
     }
 
-    public JsonNode deleteDocument(String indexName, String id) throws IOException {
-        Request request = new Request("DELETE", "/" + indexName + "/_doc/" + id + "?refresh=wait_for");
-        return executeAndReadJson(request);
+    public void deleteDocument(String indexName, String id) throws IOException {
+        DeleteResponse response = client.delete(request -> request
+                .index(indexName)
+                .id(id)
+                .refresh(Refresh.WaitFor));
+        Objects.requireNonNull(response);
     }
 
-    private JsonNode executeAndReadJson(Request request) throws IOException {
-        Response response = restClient.performRequest(request);
-        return objectMapper.readTree(response.getEntity().getContent());
+    @SuppressWarnings("unchecked")
+    private SearchHit toSearchHit(Hit<Map> hit) {
+        Map<String, Object> source = (Map<String, Object>) hit.source();
+        return new SearchHit(hit.id(), hit.score(), source);
     }
 }

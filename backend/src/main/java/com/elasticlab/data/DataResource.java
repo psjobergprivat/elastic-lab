@@ -1,9 +1,9 @@
 package com.elasticlab.data;
 
+import co.elastic.clients.elasticsearch._types.query_dsl.MatchAllQuery;
 import com.elasticlab.elasticsearch.ElasticsearchGateway;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.JsonNodeFactory;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.elasticlab.elasticsearch.IndexResult;
+import com.elasticlab.elasticsearch.SearchHits;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
@@ -13,16 +13,18 @@ import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.io.IOException;
+import java.util.Map;
 
 @Path("/data")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 public class DataResource {
 
-    private static final int DEFAULT_LIST_SIZE = 100;
+    private static final int MAX_LISTED_DOCUMENTS = 100;
 
     @Inject
     ElasticsearchGateway elasticsearch;
@@ -31,25 +33,19 @@ public class DataResource {
     String defaultIndex;
 
     @GET
-    public JsonNode listDocuments() throws IOException {
-        return elasticsearch.search(defaultIndex, listAllQuery());
+    public SearchHits listDocuments() throws IOException {
+        return elasticsearch.search(defaultIndex, MatchAllQuery.of(m -> m)._toQuery(), MAX_LISTED_DOCUMENTS);
     }
 
     @POST
-    public JsonNode createDocument(JsonNode document) throws IOException {
+    public IndexResult createDocument(Map<String, Object> document) throws IOException {
         return elasticsearch.indexDocument(defaultIndex, document);
     }
 
     @DELETE
     @Path("/{id}")
-    public JsonNode deleteDocument(@PathParam("id") String id) throws IOException {
-        return elasticsearch.deleteDocument(defaultIndex, id);
-    }
-
-    private ObjectNode listAllQuery() {
-        ObjectNode root = JsonNodeFactory.instance.objectNode();
-        root.put("size", DEFAULT_LIST_SIZE);
-        root.putObject("query").putObject("match_all");
-        return root;
+    public Response deleteDocument(@PathParam("id") String id) throws IOException {
+        elasticsearch.deleteDocument(defaultIndex, id);
+        return Response.noContent().build();
     }
 }

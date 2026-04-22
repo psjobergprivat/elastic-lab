@@ -79,10 +79,8 @@ Ext.define('ElasticLab.view.data.ManageDataPanel', {
             method: 'GET',
             success: function (response) {
                 var payload = Ext.decode(response.responseText),
-                    hits = (payload && payload.hits && payload.hits.hits) || [];
-                grid.getStore().loadData(hits.map(function (hit) {
-                    return { id: hit._id, source: hit._source };
-                }));
+                    hits = (payload && payload.hits) || [];
+                grid.getStore().loadData(hits);
             },
             failure: function (response) {
                 Ext.Msg.alert('Load failed', response.responseText || 'Unknown error');

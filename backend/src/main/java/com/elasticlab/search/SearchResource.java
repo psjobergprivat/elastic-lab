@@ -1,9 +1,10 @@
 package com.elasticlab.search;
 
+import co.elastic.clients.elasticsearch._types.query_dsl.MatchAllQuery;
+import co.elastic.clients.elasticsearch._types.query_dsl.Query;
+import co.elastic.clients.elasticsearch._types.query_dsl.QueryStringQuery;
 import com.elasticlab.elasticsearch.ElasticsearchGateway;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.JsonNodeFactory;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.elasticlab.elasticsearch.SearchHits;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.POST;
@@ -19,6 +20,8 @@ import java.io.IOException;
 @Consumes(MediaType.APPLICATION_JSON)
 public class SearchResource {
 
+    private static final int MAX_HITS = 100;
+
     @Inject
     ElasticsearchGateway elasticsearch;
 
@@ -26,16 +29,18 @@ public class SearchResource {
     String defaultIndex;
 
     @POST
-    public JsonNode search(JsonNode requestBody) throws IOException {
-        JsonNode effectiveQuery = (requestBody == null || requestBody.isMissingNode() || requestBody.isNull() || requestBody.isEmpty())
-                ? matchAll()
-                : requestBody;
-        return elasticsearch.search(defaultIndex, effectiveQuery);
+    public SearchHits search(SearchRequest request) throws IOException {
+        Query query = buildQuery(request);
+        return elasticsearch.search(defaultIndex, query, MAX_HITS);
     }
 
-    private ObjectNode matchAll() {
-        ObjectNode root = JsonNodeFactory.instance.objectNode();
-        root.putObject("query").putObject("match_all");
-        return root;
+    private Query buildQuery(SearchRequest request) {
+        if (request == null || request.text() == null || request.text().isBlank()) {
+            return MatchAllQuery.of(m -> m)._toQuery();
+        }
+        return QueryStringQuery.of(q -> q.query(request.text()))._toQuery();
+    }
+
+    public record SearchRequest(String text) {
     }
 }

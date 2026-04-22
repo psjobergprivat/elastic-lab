@@ -14,6 +14,7 @@
 * Elasticsearch is accessed for both reads and writes
 * Elasticsearch is running in a container
 * Elasticsearch uses the "dynamic mapping" feature
+* When calling Elasticsearch the latest recommended Java client supporting typed queries should be used
 * Podman is used when developing locally, but the files have to be Docker compatible
 * Complex logic and calculations should preferably be done in backend rather than frontend
 
