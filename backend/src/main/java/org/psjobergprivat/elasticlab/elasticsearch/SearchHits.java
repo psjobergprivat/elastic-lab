@@ -1,4 +1,4 @@
-package com.elasticlab.elasticsearch;
+package org.psjobergprivat.elasticlab.elasticsearch;
 
 import java.util.List;
 

@@ -1,4 +1,4 @@
-package com.elasticlab.elasticsearch;
+package org.psjobergprivat.elasticlab.elasticsearch;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch._types.Refresh;

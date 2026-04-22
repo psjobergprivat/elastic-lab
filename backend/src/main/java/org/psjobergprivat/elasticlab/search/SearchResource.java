@@ -1,10 +1,10 @@
-package com.elasticlab.search;
+package org.psjobergprivat.elasticlab.search;
 
 import co.elastic.clients.elasticsearch._types.query_dsl.MatchAllQuery;
 import co.elastic.clients.elasticsearch._types.query_dsl.Query;
 import co.elastic.clients.elasticsearch._types.query_dsl.QueryStringQuery;
-import com.elasticlab.elasticsearch.ElasticsearchGateway;
-import com.elasticlab.elasticsearch.SearchHits;
+import org.psjobergprivat.elasticlab.elasticsearch.ElasticsearchGateway;
+import org.psjobergprivat.elasticlab.elasticsearch.SearchHits;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.POST;
