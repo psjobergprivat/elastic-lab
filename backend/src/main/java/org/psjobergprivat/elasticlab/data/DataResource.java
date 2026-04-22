@@ -29,23 +29,23 @@ public class DataResource {
     @Inject
     ElasticsearchGateway elasticsearch;
 
-    @ConfigProperty(name = "elastic-lab.default-index")
-    String defaultIndex;
+    @ConfigProperty(name = "elastic-lab.default-elastic-index")
+    String defaultElasticIndex;
 
     @GET
     public SearchHits listDocuments() throws IOException {
-        return elasticsearch.search(defaultIndex, MatchAllQuery.of(m -> m)._toQuery(), MAX_LISTED_DOCUMENTS);
+        return elasticsearch.search(defaultElasticIndex, MatchAllQuery.of(m -> m)._toQuery(), MAX_LISTED_DOCUMENTS);
     }
 
     @POST
     public IndexResult createDocument(Map<String, Object> document) throws IOException {
-        return elasticsearch.indexDocument(defaultIndex, document);
+        return elasticsearch.indexDocument(defaultElasticIndex, document);
     }
 
     @DELETE
     @Path("/{id}")
     public Response deleteDocument(@PathParam("id") String id) throws IOException {
-        elasticsearch.deleteDocument(defaultIndex, id);
+        elasticsearch.deleteDocument(defaultElasticIndex, id);
         return Response.noContent().build();
     }
 }

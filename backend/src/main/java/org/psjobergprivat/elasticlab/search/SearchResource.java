@@ -25,7 +25,7 @@ public class SearchResource {
     @Inject
     ElasticsearchGateway elasticsearch;
 
-    @ConfigProperty(name = "elastic-lab.default-index")
+    @ConfigProperty(name = "elastic-lab.default-elastic-index")
     String defaultIndex;
 
     @POST
