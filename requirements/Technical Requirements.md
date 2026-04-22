@@ -1,12 +1,14 @@
 # Fundamental technical requirements
 
 ## In general
+
 * Best practice in architecture is important
 * Code is easy to read and maintain for humans
 * Descriptive names are better than comments in the code
 * Avoid comments that doesn't add useful information
 
 ## The backend
+
 * A Java application running on Quarkus
 * Latest stable Quarkus 3.34.x is used
 * Quarkus runs directly on the developer machine, not in a container
@@ -20,8 +22,10 @@
 * Maven groupId and java package is org.psjobergprivat.elasticlab
 
 ## The frontend
+
 * An Ext JS single page application
 * Only calls the backend API
 
 ## The API - used by the frontend and published by the backend
+
 * Uses REST json, no web sockets
