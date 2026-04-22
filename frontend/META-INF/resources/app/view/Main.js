@@ -6,8 +6,9 @@ Ext.define('ElasticLab.view.Main', {
         xtype: 'tabpanel',
         itemId: 'mainTabs',
         items: [
-            { title: 'Search',      xtype: 'elasticlab-search',     itemId: 'search' },
-            { title: 'Manage Data', xtype: 'elasticlab-managedata', itemId: 'manage-data' }
+            { title: 'Search',        xtype: 'elasticlab-search',       itemId: 'search' },
+            { title: 'Manage Data',   xtype: 'elasticlab-managedata',   itemId: 'manage-data' },
+            { title: 'View Metadata', xtype: 'elasticlab-viewmetadata', itemId: 'view-metadata' }
         ],
         listeners: {
             afterrender: function (tabs) {
