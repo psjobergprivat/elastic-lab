@@ -8,12 +8,14 @@
 
 ## The backend
 * A Java application running on Quarkus
+* Latest stable Quarkus 3.34.x is used
 * Quarkus runs directly on the developer machine, not in a container
+* Latest stable Elasticsearch 9.3.x is used
 * Elasticsearch is accessed for both reads and writes
 * Elasticsearch is running in a container
 * Elasticsearch uses the "dynamic mapping" feature
 * Podman is used when developing locally, but the files have to be Docker compatible
-* Com@plex logic and calculations should preferably be done in backend rather than frontend
+* Complex logic and calculations should preferably be done in backend rather than frontend
 
 ## The frontend
 * An Ext JS single page application
