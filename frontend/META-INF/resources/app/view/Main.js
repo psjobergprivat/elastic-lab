@@ -8,7 +8,7 @@ Ext.define('ElasticLab.view.Main', {
             xtype: 'container',
             height: 56,
             cls: 'elasticlab-header',
-            style: 'background:#1f3a5f;color:#fff;display:flex;align-items:center;padding:0 16px',
+            style: 'background:#1f3a5f;color:#fff;display:flex;align-items:center;padding:6px 16px',
             html: '<img src="favicon.svg" alt="Elastic Lab" style="width:32px;height:32px;margin-right:12px;position:relative;top:5px">' +
                   '<span style="font-size:24px;font-weight:bold;letter-spacing:0.5px">Elastic Lab</span>'
         },
