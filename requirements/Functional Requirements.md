@@ -23,11 +23,11 @@ Based on the current Elastic mapping arbitrary queries can be built:
   all input fields above are allowed
 * A clearly marked Search button to send the query
 
-### Query Viewer - Right, top part of page
+### Frontend Query Viewer - Right, top part of page
 
 * Dynamically displays the current query that can be sent to the backend
 
-### Query Results - Bottom part of page
+### Query Results - Left, bottom part of page
 
 #### Result List
 
@@ -38,6 +38,11 @@ Based on the current Elastic mapping arbitrary queries can be built:
 * Shown instead of the result list when an item is clicked
 * Shows the full document
 * Has a Back function to show the result list again
+
+### Elastic Query Viewer - Right, bottom part of page
+
+* When backend sends a query to Elastic, it keeps it in memory and passes a serialized version of it back with the
+  search result to be displayed here 
 
 ## Manage Test Data
 

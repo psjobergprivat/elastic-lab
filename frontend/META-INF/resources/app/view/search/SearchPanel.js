@@ -54,80 +54,105 @@ Ext.define('ElasticLab.view.search.SearchPanel', {
                 {
                     region: 'center',
                     xtype: 'panel',
-                    title: 'Query Builder',
-                    itemId: 'builder',
-                    scrollable: true,
-                    bodyPadding: 6
-                },
-                {
-                    region: 'east',
-                    xtype: 'panel',
-                    title: 'Query Viewer',
-                    itemId: 'viewer',
-                    width: 420,
-                    split: true,
-                    scrollable: true,
-                    bodyPadding: 6,
-                    html: '<pre style="margin:0;font-family:monospace;font-size:12px"></pre>'
+                    layout: 'border',
+                    items: [
+                        {
+                            region: 'center',
+                            xtype: 'panel',
+                            title: 'Query Builder',
+                            itemId: 'builder',
+                            scrollable: true,
+                            bodyPadding: 6
+                        },
+                        {
+                            region: 'east',
+                            xtype: 'panel',
+                            title: 'Frontend Query Viewer',
+                            itemId: 'viewer',
+                            width: 420,
+                            split: true,
+                            scrollable: true,
+                            bodyPadding: 6,
+                            html: '<pre style="margin:0;font-family:monospace;font-size:12px"></pre>'
+                        }
+                    ]
                 },
                 {
                     region: 'south',
                     xtype: 'panel',
-                    itemId: 'resultsArea',
-                    title: 'Results',
                     height: '50%',
                     split: true,
-                    layout: 'card',
+                    layout: 'border',
                     items: [
                         {
-                            xtype: 'grid',
-                            itemId: 'resultsList',
-                            emptyText: 'No results yet.',
-                            store: { fields: ['id', 'score', 'source'] },
-                            columns: [
-                                { text: 'ID', dataIndex: 'id', width: 260 },
-                                { text: 'Score', dataIndex: 'score', width: 80 },
-                                {
-                                    text: 'Source',
-                                    dataIndex: 'source',
-                                    flex: 1,
-                                    renderer: function (value) {
-                                        return Ext.util.Format.htmlEncode(Ext.JSON.encode(value));
-                                    }
-                                }
-                            ],
-                            listeners: {
-                                itemclick: function (grid, record) {
-                                    grid.up('elasticlab-search').showDetail(record.data);
-                                }
-                            }
-                        },
-                        {
+                            region: 'center',
                             xtype: 'panel',
-                            itemId: 'resultsDetail',
-                            layout: 'border',
+                            itemId: 'resultsArea',
+                            title: 'Results',
+                            layout: 'card',
                             items: [
                                 {
-                                    region: 'north',
-                                    xtype: 'toolbar',
-                                    items: [
+                                    xtype: 'grid',
+                                    itemId: 'resultsList',
+                                    emptyText: 'No results yet.',
+                                    store: { fields: ['id', 'score', 'source'] },
+                                    columns: [
+                                        { text: 'ID', dataIndex: 'id', width: 260 },
+                                        { text: 'Score', dataIndex: 'score', width: 80 },
                                         {
-                                            text: 'Back to list',
-                                            handler: function (btn) { btn.up('elasticlab-search').showList(); }
-                                        },
-                                        '-',
-                                        { xtype: 'tbtext', itemId: 'detailTitle', text: '' }
-                                    ]
+                                            text: 'Source',
+                                            dataIndex: 'source',
+                                            flex: 1,
+                                            renderer: function (value) {
+                                                return Ext.util.Format.htmlEncode(Ext.JSON.encode(value));
+                                            }
+                                        }
+                                    ],
+                                    listeners: {
+                                        itemclick: function (grid, record) {
+                                            grid.up('elasticlab-search').showDetail(record.data);
+                                        }
+                                    }
                                 },
                                 {
-                                    region: 'center',
                                     xtype: 'panel',
-                                    itemId: 'detailBody',
-                                    scrollable: true,
-                                    bodyPadding: 8,
-                                    html: ''
+                                    itemId: 'resultsDetail',
+                                    layout: 'border',
+                                    items: [
+                                        {
+                                            region: 'north',
+                                            xtype: 'toolbar',
+                                            items: [
+                                                {
+                                                    text: 'Back to list',
+                                                    handler: function (btn) { btn.up('elasticlab-search').showList(); }
+                                                },
+                                                '-',
+                                                { xtype: 'tbtext', itemId: 'detailTitle', text: '' }
+                                            ]
+                                        },
+                                        {
+                                            region: 'center',
+                                            xtype: 'panel',
+                                            itemId: 'detailBody',
+                                            scrollable: true,
+                                            bodyPadding: 8,
+                                            html: ''
+                                        }
+                                    ]
                                 }
                             ]
+                        },
+                        {
+                            region: 'east',
+                            xtype: 'panel',
+                            title: 'Elastic Query Viewer',
+                            itemId: 'elasticViewer',
+                            width: 420,
+                            split: true,
+                            scrollable: true,
+                            bodyPadding: 6,
+                            html: '<pre style="margin:0;font-family:monospace;font-size:12px">(run a search to see the query sent to Elastic)</pre>'
                         }
                     ]
                 }
@@ -525,11 +550,29 @@ Ext.define('ElasticLab.view.search.SearchPanel', {
                 var data = Ext.decode(response.responseText),
                     hits = (data && data.hits) || [];
                 grid.getStore().loadData(hits);
+                me.updateElasticViewer(data && data.esQuery);
             },
             failure: function (response) {
                 Ext.Msg.alert('Search failed', response.responseText || 'Unknown error');
             }
         });
+    },
+
+    updateElasticViewer: function (esQuery) {
+        var viewer = this.down('#elasticViewer');
+        if (!viewer) return;
+        var pretty;
+        if (esQuery) {
+            try {
+                pretty = JSON.stringify(JSON.parse(esQuery), null, 2);
+            } catch (e) {
+                pretty = esQuery;
+            }
+        } else {
+            pretty = '(no query was sent)';
+        }
+        viewer.update('<pre style="margin:0;font-family:monospace;font-size:12px">' +
+            Ext.util.Format.htmlEncode(pretty) + '</pre>');
     },
 
     showDetail: function (hit) {

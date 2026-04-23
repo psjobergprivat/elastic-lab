@@ -11,12 +11,15 @@ import co.elastic.clients.elasticsearch.core.IndexResponse;
 import co.elastic.clients.elasticsearch.core.SearchResponse;
 import co.elastic.clients.elasticsearch.core.bulk.BulkResponseItem;
 import co.elastic.clients.elasticsearch.core.search.Hit;
+import co.elastic.clients.json.JsonpMapper;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.json.stream.JsonGenerator;
 
 import java.io.IOException;
 import java.io.Reader;
 import java.io.StringReader;
+import java.io.StringWriter;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -38,7 +41,19 @@ public class ElasticsearchGateway {
         List<SearchHit> hits = response.hits().hits().stream()
                 .map(this::toSearchHit)
                 .toList();
-        return new SearchHits(total, hits);
+        return new SearchHits(total, hits, serializeQuery(query));
+    }
+
+    private String serializeQuery(Query query) {
+        if (query == null) {
+            return null;
+        }
+        JsonpMapper mapper = client._jsonpMapper();
+        StringWriter writer = new StringWriter();
+        try (JsonGenerator generator = mapper.jsonProvider().createGenerator(writer)) {
+            query.serialize(generator, mapper);
+        }
+        return writer.toString();
     }
 
     public IndexResult indexDocument(String indexName, Map<String, Object> document) throws IOException {
