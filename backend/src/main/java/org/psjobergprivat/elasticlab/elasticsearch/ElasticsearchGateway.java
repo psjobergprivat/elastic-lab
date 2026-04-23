@@ -3,14 +3,20 @@ package org.psjobergprivat.elasticlab.elasticsearch;
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch._types.Refresh;
 import co.elastic.clients.elasticsearch._types.query_dsl.Query;
+import co.elastic.clients.elasticsearch.core.BulkRequest;
+import co.elastic.clients.elasticsearch.core.BulkResponse;
+import co.elastic.clients.elasticsearch.core.CountResponse;
 import co.elastic.clients.elasticsearch.core.DeleteResponse;
 import co.elastic.clients.elasticsearch.core.IndexResponse;
 import co.elastic.clients.elasticsearch.core.SearchResponse;
+import co.elastic.clients.elasticsearch.core.bulk.BulkResponseItem;
 import co.elastic.clients.elasticsearch.core.search.Hit;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import java.io.IOException;
+import java.io.Reader;
+import java.io.StringReader;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -49,6 +55,58 @@ public class ElasticsearchGateway {
                 .id(id)
                 .refresh(Refresh.WaitFor));
         Objects.requireNonNull(response);
+    }
+
+    public void bulkIndex(String indexName, List<Map<String, Object>> documents) throws IOException {
+        if (documents.isEmpty()) {
+            return;
+        }
+        BulkRequest.Builder builder = new BulkRequest.Builder().index(indexName);
+        for (Map<String, Object> document : documents) {
+            builder.operations(op -> op.index(idx -> idx.document(document)));
+        }
+        BulkResponse response = client.bulk(builder.build());
+        if (response.errors()) {
+            String firstError = response.items().stream()
+                    .map(BulkResponseItem::error)
+                    .filter(Objects::nonNull)
+                    .map(e -> e.type() + ": " + e.reason())
+                    .findFirst()
+                    .orElse("unknown");
+            throw new IOException("Bulk index reported errors: " + firstError);
+        }
+    }
+
+    public void refresh(String indexName) throws IOException {
+        if (!indexExists(indexName)) {
+            return;
+        }
+        client.indices().refresh(r -> r.index(indexName));
+    }
+
+    public boolean indexExists(String indexName) throws IOException {
+        return client.indices().exists(e -> e.index(indexName)).value();
+    }
+
+    public void createIndex(String indexName, String createBodyJson) throws IOException {
+        try (Reader reader = new StringReader(createBodyJson)) {
+            client.indices().create(c -> c.index(indexName).withJson(reader));
+        }
+    }
+
+    public void dropIndex(String indexName) throws IOException {
+        if (!indexExists(indexName)) {
+            return;
+        }
+        client.indices().delete(d -> d.index(indexName));
+    }
+
+    public long countDocuments(String indexName) throws IOException {
+        if (!indexExists(indexName)) {
+            return 0L;
+        }
+        CountResponse response = client.count(c -> c.index(indexName));
+        return response.count();
     }
 
     @SuppressWarnings("unchecked")
