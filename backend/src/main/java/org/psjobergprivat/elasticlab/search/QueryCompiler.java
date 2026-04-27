@@ -28,6 +28,7 @@ public class QueryCompiler {
         if (node == null) return null;
         return switch (node) {
             case GroupNode g -> compileGroup(g, mappingsRoot);
+            case NotNode n -> compileNot(n, mappingsRoot);
             case PropertyNode p -> compileProperty(p);
             case TypeAllNode t -> compileTypeAll(t, mappingsRoot);
             case GlobalNode g -> compileGlobal(g);
@@ -48,10 +49,15 @@ public class QueryCompiler {
         return switch (op) {
             case AND -> BoolQuery.of(b -> b.must(children))._toQuery();
             case OR -> BoolQuery.of(b -> b.should(children).minimumShouldMatch("1"))._toQuery();
-            case NOT -> BoolQuery.of(b -> b
-                    .must(MatchAllQuery.of(m -> m)._toQuery())
-                    .mustNot(children))._toQuery();
         };
+    }
+
+    private Query compileNot(NotNode node, Map<String, Object> mappingsRoot) {
+        Query child = compileNode(node.child(), mappingsRoot);
+        if (child == null) return null;
+        return BoolQuery.of(b -> b
+                .must(MatchAllQuery.of(m -> m)._toQuery())
+                .mustNot(child))._toQuery();
     }
 
     private Query compileProperty(PropertyNode node) {
