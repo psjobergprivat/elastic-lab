@@ -15,17 +15,36 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
+/**
+ * Compiles a {@link QueryNode} tree into an Elasticsearch {@link Query}.
+ *
+ * <p>The internal {@code compileX} helpers return {@link Optional}: empty means the
+ * node "contributes no constraint" — for example a property leaf with a blank
+ * value, an empty group, or a NOT with no child. Empty contributions are
+ * filtered out inside parent groups; if the whole tree is empty,
+ * {@link #compile(QueryNode, Map)} falls back to {@code match_all}.
+ *
+ * <p>Validity rules per node, in one place:
+ * <ul>
+ *   <li>{@link PropertyNode} — needs a non-blank {@code path} and {@code value}.</li>
+ *   <li>{@link TypeAllNode} — needs a non-blank {@code valueType} and {@code value},
+ *       and at least one field of that type in the mapping.</li>
+ *   <li>{@link GlobalNode}, {@link FreeTextNode} — need a non-blank {@code value}.</li>
+ *   <li>{@link GroupNode} — valid iff at least one child is valid.</li>
+ *   <li>{@link NotNode} — valid iff its child is valid.</li>
+ * </ul>
+ */
 @ApplicationScoped
 public class QueryCompiler {
 
     public Query compile(QueryNode node, Map<String, Object> mappingsRoot) {
-        Query compiled = compileNode(node, mappingsRoot);
-        return compiled != null ? compiled : MatchAllQuery.of(m -> m)._toQuery();
+        return compileNode(node, mappingsRoot).orElseGet(this::matchAll);
     }
 
-    private Query compileNode(QueryNode node, Map<String, Object> mappingsRoot) {
-        if (node == null) return null;
+    private Optional<Query> compileNode(QueryNode node, Map<String, Object> mappingsRoot) {
+        if (node == null) return Optional.empty();
         return switch (node) {
             case GroupNode g -> compileGroup(g, mappingsRoot);
             case NotNode n -> compileNot(n, mappingsRoot);
@@ -36,41 +55,38 @@ public class QueryCompiler {
         };
     }
 
-    private Query compileGroup(GroupNode group, Map<String, Object> mappingsRoot) {
-        List<Query> children = new ArrayList<>();
-        if (group.children() != null) {
-            for (QueryNode child : group.children()) {
-                Query compiled = compileNode(child, mappingsRoot);
-                if (compiled != null) children.add(compiled);
-            }
-        }
-        if (children.isEmpty()) return null;
+    private Optional<Query> compileGroup(GroupNode group, Map<String, Object> mappingsRoot) {
+        List<QueryNode> rawChildren = group.children() != null ? group.children() : List.of();
+        List<Query> children = rawChildren.stream()
+                .map(child -> compileNode(child, mappingsRoot))
+                .flatMap(Optional::stream)
+                .toList();
+        if (children.isEmpty()) return Optional.empty();
         GroupNode.Operator op = group.operator() != null ? group.operator() : GroupNode.Operator.AND;
-        return switch (op) {
+        return Optional.of(switch (op) {
             case AND -> BoolQuery.of(b -> b.must(children))._toQuery();
             case OR -> BoolQuery.of(b -> b.should(children).minimumShouldMatch("1"))._toQuery();
-        };
+        });
     }
 
-    private Query compileNot(NotNode node, Map<String, Object> mappingsRoot) {
-        Query child = compileNode(node.child(), mappingsRoot);
-        if (child == null) return null;
-        return BoolQuery.of(b -> b
-                .must(MatchAllQuery.of(m -> m)._toQuery())
-                .mustNot(child))._toQuery();
+    private Optional<Query> compileNot(NotNode node, Map<String, Object> mappingsRoot) {
+        return compileNode(node.child(), mappingsRoot)
+                .map(child -> BoolQuery.of(b -> b
+                        .must(matchAll())
+                        .mustNot(child))._toQuery());
     }
 
-    private Query compileProperty(PropertyNode node) {
+    private Optional<Query> compileProperty(PropertyNode node) {
         String path = node.path();
         String value = node.value();
-        if (isBlank(path) || isBlank(value)) return null;
+        if (isBlank(path) || isBlank(value)) return Optional.empty();
         String type = node.valueType() == null ? "text" : node.valueType().toLowerCase();
 
         if (containsWildcard(value) && !"text".equals(type)) {
-            return WildcardQuery.of(w -> w.field(path).value(value).caseInsensitive(true))._toQuery();
+            return Optional.of(WildcardQuery.of(w -> w.field(path).value(value).caseInsensitive(true))._toQuery());
         }
 
-        return switch (type) {
+        return Optional.of(switch (type) {
             case "text" -> MatchQuery.of(m -> m.field(path).query(value))._toQuery();
             case "keyword" -> TermQuery.of(t -> t.field(path).value(FieldValue.of(value)))._toQuery();
             case "boolean" -> TermQuery.of(t -> t.field(path).value(FieldValue.of(Boolean.parseBoolean(value))))._toQuery();
@@ -78,24 +94,28 @@ public class QueryCompiler {
             case "double", "float", "half_float", "scaled_float" -> TermQuery.of(t -> t.field(path).value(FieldValue.of(parseDoubleSafe(value))))._toQuery();
             case "date" -> TermQuery.of(t -> t.field(path).value(FieldValue.of(value)))._toQuery();
             default -> MatchQuery.of(m -> m.field(path).query(value))._toQuery();
-        };
+        });
     }
 
-    private Query compileTypeAll(TypeAllNode node, Map<String, Object> mappingsRoot) {
-        if (isBlank(node.value()) || isBlank(node.valueType())) return null;
+    private Optional<Query> compileTypeAll(TypeAllNode node, Map<String, Object> mappingsRoot) {
+        if (isBlank(node.value()) || isBlank(node.valueType())) return Optional.empty();
         List<String> fields = collectFieldsByType(mappingsRoot, node.valueType());
-        if (fields.isEmpty()) return null;
-        return MultiMatchQuery.of(m -> m.query(node.value()).fields(fields))._toQuery();
+        if (fields.isEmpty()) return Optional.empty();
+        return Optional.of(MultiMatchQuery.of(m -> m.query(node.value()).fields(fields))._toQuery());
     }
 
-    private Query compileGlobal(GlobalNode node) {
-        if (isBlank(node.value())) return null;
-        return MultiMatchQuery.of(m -> m.query(node.value()).fields("*"))._toQuery();
+    private Optional<Query> compileGlobal(GlobalNode node) {
+        if (isBlank(node.value())) return Optional.empty();
+        return Optional.of(MultiMatchQuery.of(m -> m.query(node.value()).fields("*"))._toQuery());
     }
 
-    private Query compileFreeText(FreeTextNode node) {
-        if (isBlank(node.value())) return null;
-        return QueryStringQuery.of(q -> q.query(node.value()))._toQuery();
+    private Optional<Query> compileFreeText(FreeTextNode node) {
+        if (isBlank(node.value())) return Optional.empty();
+        return Optional.of(QueryStringQuery.of(q -> q.query(node.value()))._toQuery());
+    }
+
+    private Query matchAll() {
+        return MatchAllQuery.of(m -> m)._toQuery();
     }
 
     @SuppressWarnings("unchecked")

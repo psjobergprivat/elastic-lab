@@ -168,7 +168,7 @@ Ext.define('ElasticLab.view.search.SearchPanel', {
 
     initialize: function () {
         var me = this;
-        me.rootNode = me.createGroupNode('AND');
+        me.rootNode = null;
         Ext.Ajax.request({
             url: '/api/metadata/indices',
             method: 'GET',
@@ -253,7 +253,7 @@ Ext.define('ElasticLab.view.search.SearchPanel', {
         return { kind: 'group', operator: op || 'AND', children: [] };
     },
     createNotNode: function () {
-        return { kind: 'not', child: this.createGroupNode('AND') };
+        return { kind: 'not', child: null };
     },
     createPropertyNode: function () {
         return { kind: 'property', path: '', valueType: 'text', value: '' };
@@ -269,10 +269,7 @@ Ext.define('ElasticLab.view.search.SearchPanel', {
     },
 
     ensureRootNode: function () {
-        this.rootNode = this.normalizeNode(this.rootNode) || this.createGroupNode('AND');
-        if (this.rootNode.kind !== 'group') {
-            this.rootNode = this.createGroupNode('AND');
-        }
+        this.rootNode = this.normalizeNode(this.rootNode);
         return this.rootNode;
     },
 
@@ -290,7 +287,7 @@ Ext.define('ElasticLab.view.search.SearchPanel', {
                 }).filter(Boolean);
                 return node;
             case 'not':
-                node.child = me.normalizeNode(node.child) || me.createGroupNode('AND');
+                node.child = me.normalizeNode(node.child);
                 return node;
             case 'property':
                 node.path = me.normalizeString(node.path);
@@ -328,13 +325,14 @@ Ext.define('ElasticLab.view.search.SearchPanel', {
     renderBuilder: function () {
         var builder = this.down('#builder'),
             config,
-            groupComponent;
+            component;
         if (!builder) return;
 
+        this.ensureRootNode();
         try {
-            config = this.buildGroupConfig(this.ensureRootNode(), null);
+            config = this.buildChildConfig(this.rootNode, this.rootSlot());
             this.renderingBuilder = true;
-            groupComponent = Ext.ComponentManager.create(config, 'panel');
+            component = Ext.ComponentManager.create(config, 'panel');
         } catch (e) {
             this.renderingBuilder = false;
             if (window.console && console.error) {
@@ -346,14 +344,71 @@ Ext.define('ElasticLab.view.search.SearchPanel', {
         Ext.suspendLayouts();
         try {
             builder.removeAll();
-            builder.add(groupComponent);
+            builder.add(component);
         } finally {
             this.renderingBuilder = false;
             Ext.resumeLayouts(true);
         }
     },
 
-    buildGroupConfig: function (node, parent) {
+    rootSlot: function () {
+        var me = this;
+        return {
+            replace: function (n) { me.rootNode = n; },
+            remove: function () { me.rootNode = null; }
+        };
+    },
+
+    groupChildSlot: function (group, child) {
+        return {
+            replace: function (n) {
+                var i = group.children.indexOf(child);
+                if (i >= 0) group.children[i] = n;
+            },
+            remove: function () { Ext.Array.remove(group.children, child); }
+        };
+    },
+
+    notChildSlot: function (notNode) {
+        return {
+            replace: function (n) { notNode.child = n; },
+            remove: function () { notNode.child = null; }
+        };
+    },
+
+    buildChildConfig: function (node, slot) {
+        if (!node) return this.buildEmptyPicker(slot);
+        if (node.kind === 'group') return this.buildGroupConfig(node, slot);
+        if (node.kind === 'not') return this.buildNotConfig(node, slot);
+        return this.buildLeafConfig(node, slot);
+    },
+
+    buildEmptyPicker: function (slot) {
+        var me = this,
+            put = function (factory) {
+                return function () {
+                    slot.replace(factory.call(me));
+                    me.requestBuilderRender();
+                    me.refreshViewer();
+                };
+            };
+        return {
+            xtype: 'toolbar',
+            margin: '2 0',
+            items: [
+                { xtype: 'tbtext', text: '(empty — pick a query type)' },
+                '->',
+                { text: '+ Criterion', handler: put(me.createPropertyNode) },
+                { text: '+ Type query', handler: put(me.createTypeAllNode) },
+                { text: '+ Global', handler: put(me.createGlobalNode) },
+                { text: '+ Free text', handler: put(me.createFreeTextNode) },
+                { text: '+ Group', handler: put(function () { return me.createGroupNode('AND'); }) },
+                { text: '+ Not', handler: put(me.createNotNode) }
+            ]
+        };
+    },
+
+    buildGroupConfig: function (node, slot) {
         var me = this,
             tbar = [
                 {
@@ -379,12 +434,12 @@ Ext.define('ElasticLab.view.search.SearchPanel', {
                 { text: '+ Group', handler: function () { node.children.push(me.createGroupNode('AND')); me.requestBuilderRender(); me.refreshViewer(); } },
                 { text: '+ Not', handler: function () { node.children.push(me.createNotNode()); me.requestBuilderRender(); me.refreshViewer(); } }
             ];
-        if (parent && parent.kind === 'group') {
+        if (slot) {
             tbar.push('-');
             tbar.push({
                 text: 'Delete group',
                 handler: function () {
-                    Ext.Array.remove(parent.children, node);
+                    slot.remove();
                     me.requestBuilderRender();
                     me.refreshViewer();
                 }
@@ -397,29 +452,22 @@ Ext.define('ElasticLab.view.search.SearchPanel', {
             bodyPadding: 6,
             tbar: tbar,
             items: (node.children || []).map(function (child) {
-                return me.buildChildConfig(child, node);
+                return me.buildChildConfig(child, me.groupChildSlot(node, child));
             }).filter(Boolean)
         };
     },
 
-    buildChildConfig: function (child, parent) {
-        if (!child) return null;
-        if (child.kind === 'group') return this.buildGroupConfig(child, parent);
-        if (child.kind === 'not') return this.buildNotConfig(child, parent);
-        return this.buildLeafConfig(child, parent);
-    },
-
-    buildNotConfig: function (node, parent) {
+    buildNotConfig: function (node, slot) {
         var me = this,
             tbar = [
                 { xtype: 'tbtext', text: 'NOT' },
                 '->'
             ];
-        if (parent) {
+        if (slot) {
             tbar.push({
                 text: 'Delete NOT',
                 handler: function () {
-                    if (parent.children) Ext.Array.remove(parent.children, node);
+                    slot.remove();
                     me.requestBuilderRender();
                     me.refreshViewer();
                 }
@@ -432,11 +480,11 @@ Ext.define('ElasticLab.view.search.SearchPanel', {
             bodyPadding: 6,
             cls: 'elasticlab-not-panel',
             tbar: tbar,
-            items: [me.buildChildConfig(node.child, node)].filter(Boolean)
+            items: [me.buildChildConfig(node.child, me.notChildSlot(node))]
         };
     },
 
-    buildLeafConfig: function (node, parent) {
+    buildLeafConfig: function (node, slot) {
         var me = this,
             items = [
                 {
@@ -453,22 +501,24 @@ Ext.define('ElasticLab.view.search.SearchPanel', {
                     listeners: {
                         change: function (c, v) {
                             if (me.renderingBuilder || v === node.kind) return;
-                            me.swapKind(parent, node, v);
+                            me.swapKind(slot, v);
                         }
                     }
                 }
             ].concat(me.buildLeafInputs(node));
 
         items.push('->');
-        items.push({
-            xtype: 'button',
-            text: 'Remove',
-            handler: function () {
-                if (parent && parent.children) Ext.Array.remove(parent.children, node);
-                me.requestBuilderRender();
-                me.refreshViewer();
-            }
-        });
+        if (slot) {
+            items.push({
+                xtype: 'button',
+                text: 'Remove',
+                handler: function () {
+                    slot.remove();
+                    me.requestBuilderRender();
+                    me.refreshViewer();
+                }
+            });
+        }
 
         return {
             xtype: 'toolbar',
@@ -630,7 +680,7 @@ Ext.define('ElasticLab.view.search.SearchPanel', {
         return Ext.apply({ xtype: 'textfield', value: node.value }, common);
     },
 
-    swapKind: function (parent, node, newKind) {
+    swapKind: function (slot, newKind) {
         var replacement;
         switch (newKind) {
             case 'property': replacement = this.createPropertyNode(); break;
@@ -639,9 +689,8 @@ Ext.define('ElasticLab.view.search.SearchPanel', {
             case 'freeText': replacement = this.createFreeTextNode(); break;
             default: return;
         }
-        if (!parent || !parent.children) return;
-        var idx = parent.children.indexOf(node);
-        if (idx >= 0) parent.children[idx] = replacement;
+        if (!slot) return;
+        slot.replace(replacement);
         this.requestBuilderRender();
         this.refreshViewer();
     },
