@@ -8,6 +8,8 @@ Ext.define('ElasticLab.view.search.SearchPanel', {
     flatFields: null,
     mappingTypes: null,
     rootNode: null,
+    renderingBuilder: false,
+    builderRenderTask: null,
 
     items: [
         {
@@ -263,11 +265,86 @@ Ext.define('ElasticLab.view.search.SearchPanel', {
         return { kind: 'freeText', value: '' };
     },
 
+    ensureRootNode: function () {
+        this.rootNode = this.normalizeNode(this.rootNode) || this.createGroupNode('AND');
+        if (this.rootNode.kind !== 'group') {
+            this.rootNode = this.createGroupNode('AND');
+        }
+        return this.rootNode;
+    },
+
+    normalizeNode: function (node) {
+        var me = this;
+        if (!node || typeof node !== 'object') return null;
+
+        switch (node.kind) {
+            case 'group':
+                if (['AND', 'OR', 'NOT'].indexOf(node.operator) < 0) {
+                    node.operator = 'AND';
+                }
+                node.children = (Array.isArray(node.children) ? node.children : []).map(function (child) {
+                    return me.normalizeNode(child);
+                }).filter(Boolean);
+                return node;
+            case 'property':
+                node.path = me.normalizeString(node.path);
+                node.valueType = me.normalizeString(node.valueType) || 'text';
+                node.value = me.normalizeString(node.value);
+                return node;
+            case 'typeAll':
+                node.valueType = me.normalizeString(node.valueType) || (me.mappingTypes && me.mappingTypes[0]) || 'text';
+                node.value = me.normalizeString(node.value);
+                return node;
+            case 'global':
+            case 'freeText':
+                node.value = me.normalizeString(node.value);
+                return node;
+            default:
+                return null;
+        }
+    },
+
+    normalizeString: function (value) {
+        return value == null ? '' : String(value);
+    },
+
+    requestBuilderRender: function () {
+        var me = this;
+        if (me.builderRenderTask) {
+            clearTimeout(me.builderRenderTask);
+        }
+        me.builderRenderTask = Ext.defer(function () {
+            me.builderRenderTask = null;
+            me.renderBuilder();
+        }, 1);
+    },
+
     renderBuilder: function () {
-        var builder = this.down('#builder');
+        var builder = this.down('#builder'),
+            config,
+            groupComponent;
         if (!builder) return;
-        builder.removeAll();
-        builder.add(this.buildGroupConfig(this.rootNode, null));
+
+        try {
+            config = this.buildGroupConfig(this.ensureRootNode(), null);
+            this.renderingBuilder = true;
+            groupComponent = Ext.ComponentManager.create(config, 'panel');
+        } catch (e) {
+            this.renderingBuilder = false;
+            if (window.console && console.error) {
+                console.error('Failed to render query builder', e);
+            }
+            return;
+        }
+
+        Ext.suspendLayouts();
+        try {
+            builder.removeAll();
+            builder.add(groupComponent);
+        } finally {
+            this.renderingBuilder = false;
+            Ext.resumeLayouts(true);
+        }
     },
 
     buildGroupConfig: function (node, parent) {
@@ -280,24 +357,28 @@ Ext.define('ElasticLab.view.search.SearchPanel', {
                     store: ['AND', 'OR', 'NOT'],
                     value: node.operator,
                     listeners: {
-                        change: function (c, v) { node.operator = v; me.refreshViewer(); }
+                        change: function (c, v) {
+                            if (me.renderingBuilder || ['AND', 'OR', 'NOT'].indexOf(v) < 0) return;
+                            node.operator = v;
+                            me.refreshViewer();
+                        }
                     }
                 },
                 { xtype: 'tbtext', text: 'group' },
                 '->',
-                { text: '+ Criterion', handler: function () { node.children.push(me.createPropertyNode()); me.renderBuilder(); me.refreshViewer(); } },
-                { text: '+ Type query', handler: function () { node.children.push(me.createTypeAllNode()); me.renderBuilder(); me.refreshViewer(); } },
-                { text: '+ Global', handler: function () { node.children.push(me.createGlobalNode()); me.renderBuilder(); me.refreshViewer(); } },
-                { text: '+ Free text', handler: function () { node.children.push(me.createFreeTextNode()); me.renderBuilder(); me.refreshViewer(); } },
-                { text: '+ Group', handler: function () { node.children.push(me.createGroupNode('AND')); me.renderBuilder(); me.refreshViewer(); } }
+                { text: '+ Criterion', handler: function () { node.children.push(me.createPropertyNode()); me.requestBuilderRender(); me.refreshViewer(); } },
+                { text: '+ Type query', handler: function () { node.children.push(me.createTypeAllNode()); me.requestBuilderRender(); me.refreshViewer(); } },
+                { text: '+ Global', handler: function () { node.children.push(me.createGlobalNode()); me.requestBuilderRender(); me.refreshViewer(); } },
+                { text: '+ Free text', handler: function () { node.children.push(me.createFreeTextNode()); me.requestBuilderRender(); me.refreshViewer(); } },
+                { text: '+ Group', handler: function () { node.children.push(me.createGroupNode('AND')); me.requestBuilderRender(); me.refreshViewer(); } }
             ];
         if (parent) {
             tbar.push('-');
             tbar.push({
                 text: 'Delete group',
                 handler: function () {
-                    Ext.Array.remove(parent.children, node);
-                    me.renderBuilder();
+                    if (parent && parent.children) Ext.Array.remove(parent.children, node);
+                    me.requestBuilderRender();
                     me.refreshViewer();
                 }
             });
@@ -309,9 +390,10 @@ Ext.define('ElasticLab.view.search.SearchPanel', {
             bodyPadding: 6,
             tbar: tbar,
             items: (node.children || []).map(function (child) {
+                if (!child) return null;
                 if (child.kind === 'group') return me.buildGroupConfig(child, node);
                 return me.buildLeafConfig(child, node);
-            })
+            }).filter(Boolean)
         };
     },
 
@@ -331,7 +413,7 @@ Ext.define('ElasticLab.view.search.SearchPanel', {
                     value: node.kind,
                     listeners: {
                         change: function (c, v) {
-                            if (v === node.kind) return;
+                            if (me.renderingBuilder || v === node.kind) return;
                             me.swapKind(parent, node, v);
                         }
                     }
@@ -343,8 +425,8 @@ Ext.define('ElasticLab.view.search.SearchPanel', {
             xtype: 'button',
             text: 'Remove',
             handler: function () {
-                Ext.Array.remove(parent.children, node);
-                me.renderBuilder();
+                if (parent && parent.children) Ext.Array.remove(parent.children, node);
+                me.requestBuilderRender();
                 me.refreshViewer();
             }
         });
@@ -384,9 +466,13 @@ Ext.define('ElasticLab.view.search.SearchPanel', {
                 store: { fields: ['path', 'type'], data: fields.slice() },
                 listeners: {
                     change: function (c, v) {
+                        if (me.renderingBuilder) return;
                         node.path = v || '';
                         var rec = c.findRecordByValue(v);
-                        if (rec) node.valueType = rec.get('type');
+                        if (rec && node.valueType !== rec.get('type')) {
+                            node.valueType = rec.get('type');
+                            me.requestBuilderRender();
+                        }
                         me.refreshViewer();
                     }
                 }
@@ -409,7 +495,11 @@ Ext.define('ElasticLab.view.search.SearchPanel', {
                 store: types,
                 value: node.valueType,
                 listeners: {
-                    change: function (c, v) { node.valueType = v; me.refreshViewer(); }
+                    change: function (c, v) {
+                        if (me.renderingBuilder || !v) return;
+                        node.valueType = v;
+                        me.refreshViewer();
+                    }
                 }
             },
             {
@@ -418,7 +508,11 @@ Ext.define('ElasticLab.view.search.SearchPanel', {
                 emptyText: 'value across all fields of this type',
                 value: node.value,
                 listeners: {
-                    change: function (c, v) { node.value = v; me.refreshViewer(); }
+                    change: function (c, v) {
+                        if (me.renderingBuilder) return;
+                        node.value = me.normalizeString(v);
+                        me.refreshViewer();
+                    }
                 }
             }
         ];
@@ -435,7 +529,11 @@ Ext.define('ElasticLab.view.search.SearchPanel', {
                 emptyText: 'search in all properties',
                 value: node.value,
                 listeners: {
-                    change: function (c, v) { node.value = v; me.refreshViewer(); }
+                    change: function (c, v) {
+                        if (me.renderingBuilder) return;
+                        node.value = me.normalizeString(v);
+                        me.refreshViewer();
+                    }
                 }
             }
         ];
@@ -452,7 +550,11 @@ Ext.define('ElasticLab.view.search.SearchPanel', {
                 emptyText: 'elastic query_string syntax, e.g. title:foo AND tags:bar',
                 value: node.value,
                 listeners: {
-                    change: function (c, v) { node.value = v; me.refreshViewer(); }
+                    change: function (c, v) {
+                        if (me.renderingBuilder) return;
+                        node.value = me.normalizeString(v);
+                        me.refreshViewer();
+                    }
                 }
             }
         ];
@@ -465,7 +567,11 @@ Ext.define('ElasticLab.view.search.SearchPanel', {
                 width: 200,
                 emptyText: 'value',
                 listeners: {
-                    change: function (c, v) { node.value = (v == null) ? '' : String(v); me.refreshViewer(); }
+                    change: function (c, v) {
+                        if (me.renderingBuilder) return;
+                        node.value = me.normalizeString(v);
+                        me.refreshViewer();
+                    }
                 }
             };
         if (type === 'boolean') {
@@ -494,9 +600,10 @@ Ext.define('ElasticLab.view.search.SearchPanel', {
             case 'freeText': replacement = this.createFreeTextNode(); break;
             default: return;
         }
+        if (!parent || !parent.children) return;
         var idx = parent.children.indexOf(node);
         if (idx >= 0) parent.children[idx] = replacement;
-        this.renderBuilder();
+        this.requestBuilderRender();
         this.refreshViewer();
     },
 
@@ -525,7 +632,7 @@ Ext.define('ElasticLab.view.search.SearchPanel', {
     buildRequestPayload: function () {
         return {
             indexName: this.indexName,
-            root: this.serializeNode(this.rootNode)
+            root: this.serializeNode(this.ensureRootNode())
         };
     },
 
