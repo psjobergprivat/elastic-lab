@@ -87,12 +87,10 @@ public class QueryCompiler {
         }
 
         return Optional.of(switch (type) {
-            case "text" -> MatchQuery.of(m -> m.field(path).query(value))._toQuery();
-            case "keyword" -> TermQuery.of(t -> t.field(path).value(FieldValue.of(value)))._toQuery();
+            case "keyword", "date" -> TermQuery.of(t -> t.field(path).value(FieldValue.of(value)))._toQuery();
             case "boolean" -> TermQuery.of(t -> t.field(path).value(FieldValue.of(Boolean.parseBoolean(value))))._toQuery();
             case "long", "integer", "short", "byte" -> TermQuery.of(t -> t.field(path).value(FieldValue.of(parseLongSafe(value))))._toQuery();
             case "double", "float", "half_float", "scaled_float" -> TermQuery.of(t -> t.field(path).value(FieldValue.of(parseDoubleSafe(value))))._toQuery();
-            case "date" -> TermQuery.of(t -> t.field(path).value(FieldValue.of(value)))._toQuery();
             default -> MatchQuery.of(m -> m.field(path).query(value))._toQuery();
         });
     }
@@ -147,7 +145,7 @@ public class QueryCompiler {
             if (subFields instanceof Map<?, ?> subMap) {
                 for (Map.Entry<?, ?> sub : subMap.entrySet()) {
                     if (sub.getValue() instanceof Map<?, ?> subDef
-                            && Objects.equals((subDef).get("type"), type)) {
+                            && Objects.equals(subDef.get("type"), type)) {
                         out.add(path + "." + sub.getKey());
                     }
                 }

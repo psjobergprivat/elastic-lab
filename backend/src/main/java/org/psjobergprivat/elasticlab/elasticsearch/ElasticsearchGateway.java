@@ -10,7 +10,6 @@ import co.elastic.clients.elasticsearch.core.DeleteResponse;
 import co.elastic.clients.elasticsearch.core.IndexResponse;
 import co.elastic.clients.elasticsearch.core.SearchResponse;
 import co.elastic.clients.elasticsearch.core.bulk.BulkResponseItem;
-import co.elastic.clients.elasticsearch.core.search.Hit;
 import co.elastic.clients.json.JsonpMapper;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -30,6 +29,9 @@ public class ElasticsearchGateway {
     @Inject
     ElasticsearchClient client;
 
+    // Java's type erasure prevents Map<String, Object>.class, so Map (raw) is the standard
+    // pattern for dynamic documents with the ES Java client.
+    @SuppressWarnings({"rawtypes", "unchecked"})
     public SearchHits search(String indexName, Query query, int size) throws IOException {
         SearchResponse<Map> response = client.search(request -> request
                         .index(indexName)
@@ -39,7 +41,7 @@ public class ElasticsearchGateway {
 
         long total = response.hits().total() != null ? response.hits().total().value() : 0L;
         List<SearchHit> hits = response.hits().hits().stream()
-                .map(this::toSearchHit)
+                .map(hit -> new SearchHit(hit.id(), hit.score(), (Map<String, Object>) hit.source()))
                 .toList();
         return new SearchHits(total, hits, serializeQuery(query));
     }
@@ -124,9 +126,4 @@ public class ElasticsearchGateway {
         return response.count();
     }
 
-    @SuppressWarnings("unchecked")
-    private SearchHit toSearchHit(Hit<Map> hit) {
-        Map<String, Object> source = (Map<String, Object>) hit.source();
-        return new SearchHit(hit.id(), hit.score(), source);
-    }
 }
