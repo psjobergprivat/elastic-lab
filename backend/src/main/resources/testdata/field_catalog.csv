@@ -100,3 +100,10 @@ currency,keyword,file:currencies.csv
 tax_rate,double,random
 discount,double,random
 date_of_birth,date,random
+body,text,langtext:sentences
+message,text,langtext:sentences
+summary,text,langtext:sentences
+comment,text,langtext:sentences
+review,text,langtext:sentences
+abstract,text,langtext:sentences
+excerpt,text,langtext:sentences

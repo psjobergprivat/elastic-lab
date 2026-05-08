@@ -99,6 +99,9 @@ public class DocumentGenerator {
     private static final List<ContainerDef> ROOT_CONTAINERS =
             List.of(PERSON, ORGANIZATION, PRODUCT, SERVER, EVENT);
 
+    private static final List<String> LANG_CODES =
+            List.of("en", "fr", "de", "es", "ru", "ar", "he", "zh");
+
     private static final List<String> FLATTENED_KEYS = List.of("color", "size", "region", "source", "channel");
 
     private static final int[] US_AREA_CODES = {202, 212, 310, 404, 415, 512, 617, 646, 702, 773, 917};
@@ -114,6 +117,10 @@ public class DocumentGenerator {
     public Map<String, Object> generate(GenerationParameters params, Random random) {
         int targetFields = randomBetween(params.minFields(), params.maxFields(), random);
         int depth = randomBetween(params.minDepth(), params.maxDepth(), random);
+        // 80% single-language document, 20% multilingual
+        String docLang = random.nextInt(10) < 8
+                ? LANG_CODES.get(random.nextInt(LANG_CODES.size()))
+                : "multilang";
         Map<String, Object> root = new LinkedHashMap<>();
         Map<String, List<Map<String, Object>>> fieldTargets = new HashMap<>();
         if (depth > 1) {
@@ -128,7 +135,7 @@ public class DocumentGenerator {
             Map<String, Object> target = (targets == null || targets.isEmpty())
                     ? root : targets.get(random.nextInt(targets.size()));
             if (!target.containsKey(fd.name())) {
-                target.put(fd.name(), generateValue(fd, random));
+                target.put(fd.name(), generateValue(fd, docLang, random));
                 placed++;
             }
         }
@@ -155,10 +162,15 @@ public class DocumentGenerator {
         return min == max ? min : min + random.nextInt(max - min + 1);
     }
 
-    private Object generateValue(FieldDefinition fd, Random random) {
+    private Object generateValue(FieldDefinition fd, String docLang, Random random) {
         String source = fd.source();
         if (source.startsWith("file:")) {
             List<String> values = valueSources.get(source.substring("file:".length()));
+            return values.get(random.nextInt(values.size()));
+        }
+        if (source.startsWith("langtext:")) {
+            String base = source.substring("langtext:".length());
+            List<String> values = valueSources.get(base + "_" + docLang + ".csv");
             return values.get(random.nextInt(values.size()));
         }
         if (source.startsWith("multi:")) {
