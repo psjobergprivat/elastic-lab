@@ -112,10 +112,6 @@ class TestDataFlowTest {
         assertThat(templateMatchesWith(templates, "field_relation", "relation", "join"), equalTo(true));
         assertThat(templateMatchesWith(templates, "field_account_type", "account_type", "constant_keyword"), equalTo(true));
 
-        Map<String, Object> nestedTemplate = findTemplate(templates, "nested_containers");
-        assertNotNull(nestedTemplate, "nested_containers template should exist");
-        assertThat(((Map<?, ?>) nestedTemplate.get("mapping")).get("type"), equalTo("nested"));
-
         Map<String, Object> properties = mapping.getMap("mappings.properties");
         if (properties != null) {
             assertResolvedTypeIfPresent(properties, "client_ip", "ip");

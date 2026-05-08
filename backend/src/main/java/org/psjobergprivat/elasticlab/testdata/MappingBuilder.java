@@ -13,7 +13,6 @@ import java.util.Map;
 @ApplicationScoped
 public class MappingBuilder {
 
-    private static final String NESTED_CONTAINER_PATTERN = "nested_*";
     private static final Map<String, String> JOIN_RELATIONS = Map.of("parent", "child");
 
     @Inject
@@ -39,10 +38,6 @@ public class MappingBuilder {
         for (FieldDefinition fd : catalog.all()) {
             templates.add(Map.of("field_" + fd.name(), buildTemplate(fd)));
         }
-        templates.add(Map.of("nested_containers", Map.of(
-                "match", NESTED_CONTAINER_PATTERN,
-                "match_mapping_type", "object",
-                "mapping", Map.of("type", "nested"))));
         return templates;
     }
 

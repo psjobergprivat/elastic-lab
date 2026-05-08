@@ -9,6 +9,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -18,16 +19,89 @@ import java.util.UUID;
 @ApplicationScoped
 public class DocumentGenerator {
 
-    private static final List<String> CONTAINER_NAMES = List.of(
-            "details", "metadata", "info", "extra", "context", "section", "scope",
-            "nested_items", "nested_events", "nested_records");
+    // --- Level 3 containers (leaves) ---
 
-    private static final List<String> FLATTENED_KEYS = List.of(
-            "color", "size", "region", "source", "channel");
+    private static final ContainerDef GEO = new ContainerDef("geo",
+            List.of("latitude", "longitude"),
+            List.of());
+
+    private static final ContainerDef COMPONENT = new ContainerDef("component",
+            List.of("name", "quantity", "weight", "length", "serial_number", "notes"),
+            List.of());
+
+    private static final ContainerDef SUBNET = new ContainerDef("subnet",
+            List.of("client_ip", "server_ip", "gateway_ip", "allowed_ips", "protocol", "port"),
+            List.of());
+
+    // --- Level 2 containers ---
+
+    private static final ContainerDef ADDRESS = new ContainerDef("address",
+            List.of("street", "city", "zip_code", "postal_code", "country_code"),
+            List.of(GEO));
+
+    private static final ContainerDef EMPLOYMENT = new ContainerDef("employment",
+            List.of("title", "organization_name", "department_name", "email", "phone", "country_code", "date_of_birth"),
+            List.of());
+
+    private static final ContainerDef FINANCIALS = new ContainerDef("financials",
+            List.of("amount", "price", "currency", "tax_rate", "discount", "price_range"),
+            List.of());
+
+    private static final ContainerDef SPECS = new ContainerDef("specs",
+            List.of("length", "width", "height", "weight", "color", "material", "capacity", "serial_number", "model_number", "manufacturer"),
+            List.of(COMPONENT));
+
+    private static final ContainerDef INVENTORY = new ContainerDef("inventory",
+            List.of("quantity", "stock_count", "min_stock", "amount", "price", "size_range", "event_period", "category", "sku"),
+            List.of());
+
+    private static final ContainerDef HARDWARE = new ContainerDef("hardware",
+            List.of("cpu_count", "memory", "disk_size", "capacity", "serial_number", "model_number"),
+            List.of());
+
+    private static final ContainerDef NETWORK = new ContainerDef("network",
+            List.of("gateway_ip", "allowed_ips", "blocked_ips", "protocol", "port", "hostname"),
+            List.of(SUBNET));
+
+    private static final ContainerDef PAYLOAD = new ContainerDef("payload",
+            List.of("content", "description", "notes", "score", "size_range", "score_range",
+                    "priority", "severity", "error_code", "error_message", "attachment", "thumbnail"),
+            List.of());
+
+    // --- Level 1 (root) containers ---
+
+    private static final ContainerDef PERSON = new ContainerDef("person",
+            List.of("username", "display_name", "email", "mobile", "phone_e164", "status",
+                    "tags", "labels", "language", "last_login", "date_of_birth"),
+            List.of(ADDRESS, EMPLOYMENT));
+
+    private static final ContainerDef ORGANIZATION = new ContainerDef("organization",
+            List.of("display_name", "email", "website", "employee_count", "status",
+                    "tags", "labels", "language", "organization_name"),
+            List.of(ADDRESS, FINANCIALS));
+
+    private static final ContainerDef PRODUCT = new ContainerDef("product",
+            List.of("sku", "category", "brand", "manufacturer", "description", "status",
+                    "tags", "labels", "rating", "app_version", "archived"),
+            List.of(SPECS, INVENTORY));
+
+    private static final ContainerDef SERVER = new ContainerDef("server",
+            List.of("hostname", "fqdn", "api_version", "schema_version", "status",
+                    "tags", "labels", "app_version"),
+            List.of(HARDWARE, NETWORK));
+
+    private static final ContainerDef EVENT = new ContainerDef("event",
+            List.of("status", "tags", "labels", "event_count", "view_count", "ratio",
+                    "score_range", "duration_ms", "campaign_window", "created_at", "updated_at",
+                    "published_at", "expires_at", "event_period", "priority", "severity"),
+            List.of(PAYLOAD));
+
+    private static final List<ContainerDef> ROOT_CONTAINERS =
+            List.of(PERSON, ORGANIZATION, PRODUCT, SERVER, EVENT);
+
+    private static final List<String> FLATTENED_KEYS = List.of("color", "size", "region", "source", "channel");
 
     private static final int[] US_AREA_CODES = {202, 212, 310, 404, 415, 512, 617, 646, 702, 773, 917};
-
-    private static final String JOIN_TYPE = "join";
 
     private static final long DATE_RANGE_DAYS = 365L;
 
@@ -38,84 +112,47 @@ public class DocumentGenerator {
     ValueSourceRegistry valueSources;
 
     public Map<String, Object> generate(GenerationParameters params, Random random) {
-        int requestedFields = randomBetween(params.minFields(), params.maxFields(), random);
+        int targetFields = randomBetween(params.minFields(), params.maxFields(), random);
         int depth = randomBetween(params.minDepth(), params.maxDepth(), random);
-        List<FieldDefinition> selected = pickFields(requestedFields, random);
-        List<List<FieldDefinition>> byLevel = distributeAcrossLevels(selected, depth, random);
-        return buildDocument(byLevel, depth, random);
-    }
-
-    private int randomBetween(int min, int max, Random random) {
-        return min == max ? min : min + random.nextInt(max - min + 1);
-    }
-
-    private List<FieldDefinition> pickFields(int count, Random random) {
-        List<FieldDefinition> all = catalog.all();
-        if (all.isEmpty()) {
-            throw new IllegalStateException("Field catalog is empty");
-        }
-        List<FieldDefinition> shuffled = new ArrayList<>(all);
-        Collections.shuffle(shuffled, random);
-        if (count <= shuffled.size()) {
-            return shuffled.subList(0, count);
-        }
-        List<FieldDefinition> result = new ArrayList<>(count);
-        result.addAll(shuffled);
-        while (result.size() < count) {
-            result.add(shuffled.get(random.nextInt(shuffled.size())));
-        }
-        return result;
-    }
-
-    private List<List<FieldDefinition>> distributeAcrossLevels(List<FieldDefinition> fields, int depth, Random random) {
-        List<List<FieldDefinition>> byLevel = new ArrayList<>(depth);
-        for (int i = 0; i < depth; i++) {
-            byLevel.add(new ArrayList<>());
-        }
-        List<FieldDefinition> joinFields = new ArrayList<>();
-        List<FieldDefinition> regular = new ArrayList<>();
-        for (FieldDefinition fd : fields) {
-            (JOIN_TYPE.equals(fd.type()) ? joinFields : regular).add(fd);
-        }
-        byLevel.get(0).addAll(joinFields);
-        Collections.shuffle(regular, random);
-        int seedCount = Math.min(depth, regular.size());
-        for (int i = 0; i < seedCount; i++) {
-            byLevel.get(i).add(regular.remove(0));
-        }
-        for (FieldDefinition fd : regular) {
-            byLevel.get(random.nextInt(depth)).add(fd);
-        }
-        return byLevel;
-    }
-
-    private Map<String, Object> buildDocument(List<List<FieldDefinition>> byLevel, int depth, Random random) {
         Map<String, Object> root = new LinkedHashMap<>();
-        Map<String, Object> current = root;
-        for (int level = 0; level < depth; level++) {
-            for (FieldDefinition fd : byLevel.get(level)) {
-                String key = uniqueKey(current, fd.name());
-                current.put(key, generateValue(fd, random));
-            }
-            if (level + 1 < depth) {
-                String containerKey = uniqueKey(current, CONTAINER_NAMES.get(random.nextInt(CONTAINER_NAMES.size())));
-                Map<String, Object> next = new LinkedHashMap<>();
-                current.put(containerKey, next);
-                current = next;
+        Map<String, List<Map<String, Object>>> fieldTargets = new HashMap<>();
+        if (depth > 1) {
+            buildStructure(root, ROOT_CONTAINERS, fieldTargets, depth - 1, random);
+        }
+        List<FieldDefinition> shuffled = new ArrayList<>(catalog.all());
+        Collections.shuffle(shuffled, random);
+        int placed = 0;
+        for (FieldDefinition fd : shuffled) {
+            if (placed >= targetFields) break;
+            List<Map<String, Object>> targets = fieldTargets.get(fd.name());
+            Map<String, Object> target = (targets == null || targets.isEmpty())
+                    ? root : targets.get(random.nextInt(targets.size()));
+            if (!target.containsKey(fd.name())) {
+                target.put(fd.name(), generateValue(fd, random));
+                placed++;
             }
         }
         return root;
     }
 
-    private String uniqueKey(Map<String, Object> existing, String desired) {
-        if (!existing.containsKey(desired)) {
-            return desired;
+    private void buildStructure(Map<String, Object> parentMap, List<ContainerDef> containers,
+            Map<String, List<Map<String, Object>>> fieldTargets, int remainingDepth, Random random) {
+        for (ContainerDef container : containers) {
+            if (random.nextBoolean()) {
+                Map<String, Object> containerMap = new LinkedHashMap<>();
+                parentMap.put(container.name(), containerMap);
+                for (String fieldName : container.fields()) {
+                    fieldTargets.computeIfAbsent(fieldName, k -> new ArrayList<>()).add(containerMap);
+                }
+                if (remainingDepth > 1 && !container.children().isEmpty()) {
+                    buildStructure(containerMap, container.children(), fieldTargets, remainingDepth - 1, random);
+                }
+            }
         }
-        int suffix = 2;
-        while (existing.containsKey(desired + "_" + suffix)) {
-            suffix++;
-        }
-        return desired + "_" + suffix;
+    }
+
+    private int randomBetween(int min, int max, Random random) {
+        return min == max ? min : min + random.nextInt(max - min + 1);
     }
 
     private Object generateValue(FieldDefinition fd, Random random) {
@@ -142,6 +179,15 @@ public class DocumentGenerator {
         }
         if ("phone:e164".equals(source)) {
             return randomPhoneE164(random);
+        }
+        if ("geo:lat".equals(source)) {
+            return Math.round((random.nextDouble() * 180.0 - 90.0) * 10000.0) / 10000.0;
+        }
+        if ("geo:lon".equals(source)) {
+            return Math.round((random.nextDouble() * 360.0 - 180.0) * 10000.0) / 10000.0;
+        }
+        if ("port:random".equals(source)) {
+            return 1 + random.nextInt(65535);
         }
         return generateRandomByType(fd.type(), random);
     }

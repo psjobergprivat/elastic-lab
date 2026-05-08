@@ -52,7 +52,9 @@ Based on the current Elastic mapping arbitrary queries can be built:
 * Test data can be generated and inserted into Elastic based on a set of user entered parameters:
     * Number of documents (1-10_000_000)
     * Number of fields per document, random number between min and max (1-50)
-    * Depth as in json object levels, min to max. Fields are spread out on all levels. (1-5)
+    * Depth as in json nesting levels, min to max (1-5). At depth 1 all fields are at the root. Deeper depths activate
+      domain containers (person, organization, product, server, event) and their sub-containers, keeping the total
+      unique Elasticsearch field paths bounded regardless of document count.
 * All data in the current index can be paged through, displayed as a list of documents on the right side
 * When clicking a document, the same functionality as Search/Query Results/Result item is available 
 * Without inserting anything in Elastic an example document based on current parameters can be generated and displayed

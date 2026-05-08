@@ -48,9 +48,9 @@ Ext.define('ElasticLab.view.data.ManageDataPanel', {
                     layout: 'hbox',
                     defaults: { margin: '0 6 0 0' },
                     items: [
-                        { xtype: 'numberfield', itemId: 'minDepth', emptyText: 'min', minValue: 1, maxValue: 5, value: 1, width: 80 },
+                        { xtype: 'numberfield', itemId: 'minDepth', emptyText: 'min', minValue: 1, maxValue: 4, value: 1, width: 80 },
                         { xtype: 'tbtext', text: 'to' },
-                        { xtype: 'numberfield', itemId: 'maxDepth', emptyText: 'max', minValue: 1, maxValue: 5, value: 2, width: 80 }
+                        { xtype: 'numberfield', itemId: 'maxDepth', emptyText: 'max', minValue: 1, maxValue: 4, value: 2, width: 80 }
                     ]
                 },
                 {
