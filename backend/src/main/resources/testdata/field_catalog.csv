@@ -61,3 +61,6 @@ blocked_ips,ip_range,random
 attributes,flattened,random
 properties,flattened,random
 relation,join,random
+phone,wildcard,phone:random
+mobile,wildcard,phone:random
+phone_e164,keyword,phone:e164

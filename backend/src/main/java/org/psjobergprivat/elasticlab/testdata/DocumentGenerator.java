@@ -25,6 +25,8 @@ public class DocumentGenerator {
     private static final List<String> FLATTENED_KEYS = List.of(
             "color", "size", "region", "source", "channel");
 
+    private static final int[] US_AREA_CODES = {202, 212, 310, 404, 415, 512, 617, 646, 702, 773, 917};
+
     private static final String JOIN_TYPE = "join";
 
     private static final long DATE_RANGE_DAYS = 365L;
@@ -135,6 +137,12 @@ public class DocumentGenerator {
         if ("uuid".equals(source)) {
             return UUID.randomUUID().toString();
         }
+        if ("phone:random".equals(source)) {
+            return randomPhoneMessy(random);
+        }
+        if ("phone:e164".equals(source)) {
+            return randomPhoneE164(random);
+        }
         return generateRandomByType(fd.type(), random);
     }
 
@@ -230,5 +238,125 @@ public class DocumentGenerator {
         Map<String, Object> join = new LinkedHashMap<>();
         join.put("name", "parent");
         return join;
+    }
+
+    private String randomPhoneMessy(Random random) {
+        return switch (random.nextInt(7)) {
+            case 0 -> randomSwedishPhone(random);
+            case 1 -> randomUsPhone(random);
+            case 2 -> randomUkPhone(random);
+            case 3 -> randomGermanPhone(random);
+            case 4 -> randomFrenchPhone(random);
+            case 5 -> randomSpanishPhone(random);
+            default -> randomAustralianPhone(random);
+        };
+    }
+
+    private String randomPhoneE164(Random random) {
+        return switch (random.nextInt(7)) {
+            case 0 -> String.format("+467%d%03d%02d%02d",
+                    random.nextInt(10), random.nextInt(1000), random.nextInt(100), random.nextInt(100));
+            case 1 -> String.format("+1%d%03d%04d",
+                    US_AREA_CODES[random.nextInt(US_AREA_CODES.length)], 200 + random.nextInt(800), random.nextInt(10000));
+            case 2 -> String.format("+447%03d%06d",
+                    700 + random.nextInt(300), random.nextInt(1_000_000));
+            case 3 -> String.format("+49%d%08d",
+                    150 + random.nextInt(30), random.nextInt(100_000_000));
+            case 4 -> String.format("+336%02d%02d%02d%02d",
+                    random.nextInt(100), random.nextInt(100), random.nextInt(100), random.nextInt(100));
+            case 5 -> String.format("+346%02d%03d%03d",
+                    random.nextInt(100), random.nextInt(1000), random.nextInt(1000));
+            default -> String.format("+614%02d%03d%03d",
+                    random.nextInt(100), random.nextInt(1000), random.nextInt(1000));
+        };
+    }
+
+    private String randomSwedishPhone(Random random) {
+        int d = random.nextInt(10);
+        int g3 = random.nextInt(1000);
+        int g2a = random.nextInt(100);
+        int g2b = random.nextInt(100);
+        return switch (random.nextInt(5)) {
+            case 0 -> String.format("+46 7%d-%03d %02d %02d", d, g3, g2a, g2b);
+            case 1 -> String.format("07%d%03d%02d%02d", d, g3, g2a, g2b);
+            case 2 -> String.format("07%d %03d %02d %02d", d, g3, g2a, g2b);
+            case 3 -> String.format("07%d-%03d %02d %02d", d, g3, g2a, g2b);
+            default -> String.format("0046 7%d-%03d %02d %02d", d, g3, g2a, g2b);
+        };
+    }
+
+    private String randomUsPhone(Random random) {
+        int area = US_AREA_CODES[random.nextInt(US_AREA_CODES.length)];
+        int exchange = 200 + random.nextInt(800);
+        int number = random.nextInt(10000);
+        return switch (random.nextInt(4)) {
+            case 0 -> String.format("+1 (%d) %d-%04d", area, exchange, number);
+            case 1 -> String.format("%d-%d-%04d", area, exchange, number);
+            case 2 -> String.format("(%d) %d-%04d", area, exchange, number);
+            default -> String.format("%d%d%04d", area, exchange, number);
+        };
+    }
+
+    private String randomUkPhone(Random random) {
+        int prefix = 7700 + random.nextInt(300);
+        int local = random.nextInt(1_000_000);
+        return switch (random.nextInt(4)) {
+            case 0 -> String.format("+44 %d %06d", prefix, local);
+            case 1 -> String.format("0%d %06d", prefix, local);
+            case 2 -> String.format("+44-%d-%06d", prefix, local);
+            default -> String.format("0044 %d %06d", prefix, local);
+        };
+    }
+
+    private String randomGermanPhone(Random random) {
+        int prefix = 150 + random.nextInt(30);
+        int local = random.nextInt(100_000_000);
+        return switch (random.nextInt(4)) {
+            case 0 -> String.format("+49 %d %08d", prefix, local);
+            case 1 -> String.format("0%d %08d", prefix, local);
+            case 2 -> String.format("+49-%d-%08d", prefix, local);
+            default -> String.format("0049 %d %08d", prefix, local);
+        };
+    }
+
+    private String randomFrenchPhone(Random random) {
+        int g2a = random.nextInt(100);
+        int g2b = random.nextInt(100);
+        int g2c = random.nextInt(100);
+        int g2d = random.nextInt(100);
+        return switch (random.nextInt(5)) {
+            case 0 -> String.format("+33 6 %02d %02d %02d %02d", g2a, g2b, g2c, g2d);
+            case 1 -> String.format("06 %02d %02d %02d %02d", g2a, g2b, g2c, g2d);
+            case 2 -> String.format("06%02d%02d%02d%02d", g2a, g2b, g2c, g2d);
+            case 3 -> String.format("0033 6 %02d %02d %02d %02d", g2a, g2b, g2c, g2d);
+            default -> String.format("06.%02d.%02d.%02d.%02d", g2a, g2b, g2c, g2d);
+        };
+    }
+
+    // Spain: local format starts directly with 6XX — no leading trunk zero
+    private String randomSpanishPhone(Random random) {
+        int d2 = random.nextInt(100);
+        int g3a = random.nextInt(1000);
+        int g3b = random.nextInt(1000);
+        return switch (random.nextInt(5)) {
+            case 0 -> String.format("+34 6%02d %03d %03d", d2, g3a, g3b);
+            case 1 -> String.format("6%02d %03d %03d", d2, g3a, g3b);
+            case 2 -> String.format("6%02d-%03d-%03d", d2, g3a, g3b);
+            case 3 -> String.format("0034 6%02d %03d %03d", d2, g3a, g3b);
+            default -> String.format("6%02d.%03d.%03d", d2, g3a, g3b);
+        };
+    }
+
+    // Australia: local mobile prefix is 04XX, not a bare 0
+    private String randomAustralianPhone(Random random) {
+        int d2 = random.nextInt(100);
+        int g3a = random.nextInt(1000);
+        int g3b = random.nextInt(1000);
+        return switch (random.nextInt(4)) {
+            case 0 -> String.format("+61 4%02d %03d %03d", d2, g3a, g3b);
+            case 1 -> String.format("04%02d %03d %03d", d2, g3a, g3b);
+            case 2 -> String.format("04%02d-%03d-%03d", d2, g3a, g3b);
+            default -> String.format("0061 4%02d %03d %03d", d2, g3a, g3b);
+        };
     }
 }
