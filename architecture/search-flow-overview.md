@@ -77,7 +77,7 @@ classDiagram
     direction TB
 
     class QueryNode {
-        <<sealed interface>>
+        <<interface>>
     }
     class GroupNode {
         Operator operator
@@ -115,6 +115,6 @@ classDiagram
     QueryNode <|.. FreeTextNode
 
     GroupNode --> Operator
-    GroupNode o-- "0..*" QueryNode : children
-    NotNode o-- "0..1" QueryNode : child
+    GroupNode --> "0..*" QueryNode : children
+    NotNode --> "0..1" QueryNode : child
 ```
