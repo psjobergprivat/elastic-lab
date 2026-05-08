@@ -43,7 +43,9 @@ public class SearchResource {
         Map<String, Object> mappings = loadMappings(indexName);
         QueryNode root = request != null ? request.root() : null;
         Query query = queryCompiler.compile(root, mappings);
-        return elasticsearch.search(indexName, query, MAX_HITS);
+        int size = (request != null && request.size() != null) ? Math.min(request.size(), MAX_HITS) : MAX_HITS;
+        int from = (request != null && request.from() != null) ? request.from() : 0;
+        return elasticsearch.search(indexName, query, size, from);
     }
 
     private Map<String, Object> loadMappings(String indexName) throws IOException {
@@ -51,6 +53,6 @@ public class SearchResource {
         return metadata.mappings() != null ? metadata.mappings() : Map.of();
     }
 
-    public record SearchRequest(String indexName, QueryNode root) {
+    public record SearchRequest(String indexName, QueryNode root, Integer from, Integer size) {
     }
 }

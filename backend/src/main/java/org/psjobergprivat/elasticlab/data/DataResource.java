@@ -13,8 +13,10 @@ import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
+import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
@@ -40,8 +42,11 @@ public class DataResource {
     String defaultElasticIndex;
 
     @GET
-    public SearchHits listDocuments() throws IOException {
-        return elasticsearch.search(defaultElasticIndex, MatchAllQuery.of(m -> m)._toQuery(), MAX_LISTED_DOCUMENTS);
+    public SearchHits listDocuments(
+            @QueryParam("from") @DefaultValue("0") int from,
+            @QueryParam("size") @DefaultValue("50") int size) throws IOException {
+        int cappedSize = Math.min(size, MAX_LISTED_DOCUMENTS);
+        return elasticsearch.search(defaultElasticIndex, MatchAllQuery.of(m -> m)._toQuery(), cappedSize, from);
     }
 
     @POST

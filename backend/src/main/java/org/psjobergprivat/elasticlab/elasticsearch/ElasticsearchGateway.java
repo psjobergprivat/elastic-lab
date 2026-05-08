@@ -32,10 +32,11 @@ public class ElasticsearchGateway {
     // Java's type erasure prevents Map<String, Object>.class, so Map (raw) is the standard
     // pattern for dynamic documents with the ES Java client.
     @SuppressWarnings({"rawtypes", "unchecked"})
-    public SearchHits search(String indexName, Query query, int size) throws IOException {
+    public SearchHits search(String indexName, Query query, int size, int from) throws IOException {
         SearchResponse<Map> response = client.search(request -> request
                         .index(indexName)
                         .size(size)
+                        .from(from)
                         .query(query),
                 Map.class);
 

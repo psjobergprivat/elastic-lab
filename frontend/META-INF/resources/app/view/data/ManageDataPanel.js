@@ -5,6 +5,8 @@ Ext.define('ElasticLab.view.data.ManageDataPanel', {
 
     statusPollMs: 750,
     statusPollTask: null,
+    docCurrentPage: 1,
+    docPageSize: 50,
 
     items: [
         {
@@ -106,31 +108,91 @@ Ext.define('ElasticLab.view.data.ManageDataPanel', {
         },
         {
             region: 'center',
-            xtype: 'grid',
-            itemId: 'documentsGrid',
-            emptyText: 'No documents loaded.',
-            tbar: [
+            xtype: 'panel',
+            layout: 'card',
+            itemId: 'docArea',
+            items: [
                 {
-                    text: 'Refresh',
-                    handler: function (btn) { btn.up('elasticlab-managedata').refreshDocuments(); }
-                },
-                {
-                    text: 'Delete selected',
-                    handler: function (btn) { btn.up('elasticlab-managedata').deleteSelectedDocument(); }
-                },
-                '->',
-                { xtype: 'tbtext', itemId: 'gridTotal', text: '' }
-            ],
-            store: { fields: ['id', 'source'] },
-            columns: [
-                { text: 'ID', dataIndex: 'id', width: 280 },
-                {
-                    text: 'Source',
-                    dataIndex: 'source',
-                    flex: 1,
-                    renderer: function (value) {
-                        return Ext.util.Format.htmlEncode(Ext.JSON.encode(value));
+                    xtype: 'grid',
+                    itemId: 'documentsGrid',
+                    emptyText: 'No documents loaded.',
+                    tbar: [
+                        {
+                            text: 'Refresh',
+                            handler: function (btn) { btn.up('elasticlab-managedata').refreshDocuments(); }
+                        },
+                        {
+                            text: 'Delete selected',
+                            handler: function (btn) { btn.up('elasticlab-managedata').deleteSelectedDocument(); }
+                        },
+                        '->',
+                        { xtype: 'tbtext', itemId: 'gridTotal', text: '' },
+                        '-',
+                        {
+                            xtype: 'button',
+                            itemId: 'prevPage',
+                            text: '◀',
+                            disabled: true,
+                            handler: function (btn) {
+                                var view = btn.up('elasticlab-managedata');
+                                view.refreshDocuments(view.docCurrentPage - 1);
+                            }
+                        },
+                        { xtype: 'tbtext', itemId: 'pageInfo', text: '' },
+                        {
+                            xtype: 'button',
+                            itemId: 'nextPage',
+                            text: '▶',
+                            disabled: true,
+                            handler: function (btn) {
+                                var view = btn.up('elasticlab-managedata');
+                                view.refreshDocuments(view.docCurrentPage + 1);
+                            }
+                        }
+                    ],
+                    store: { fields: ['id', 'source'] },
+                    columns: [
+                        { text: 'ID', dataIndex: 'id', width: 280 },
+                        {
+                            text: 'Source',
+                            dataIndex: 'source',
+                            flex: 1,
+                            renderer: function (value) {
+                                return Ext.util.Format.htmlEncode(Ext.JSON.encode(value));
+                            }
+                        }
+                    ],
+                    listeners: {
+                        itemclick: function (grid, record) {
+                            grid.up('elasticlab-managedata').showDocumentDetail(record.data);
+                        }
                     }
+                },
+                {
+                    xtype: 'panel',
+                    layout: 'border',
+                    items: [
+                        {
+                            region: 'north',
+                            xtype: 'toolbar',
+                            items: [
+                                {
+                                    text: 'Back to list',
+                                    handler: function (btn) { btn.up('elasticlab-managedata').showDocumentList(); }
+                                },
+                                '-',
+                                { xtype: 'tbtext', itemId: 'docDetailTitle', text: '' }
+                            ]
+                        },
+                        {
+                            region: 'center',
+                            xtype: 'panel',
+                            itemId: 'docDetailBody',
+                            scrollable: true,
+                            bodyPadding: 8,
+                            html: ''
+                        }
+                    ]
                 }
             ]
         }
@@ -252,7 +314,7 @@ Ext.define('ElasticLab.view.data.ManageDataPanel', {
                     view.stopPollingStatus();
                     view.setGenerateBusy(false);
                     if (status && status.state === 'completed') {
-                        view.refreshDocuments();
+                        view.refreshDocuments(1);
                     } else if (status && status.state === 'failed') {
                         Ext.Msg.alert('Generation failed', status.error || 'Unknown error');
                     }
@@ -303,7 +365,7 @@ Ext.define('ElasticLab.view.data.ManageDataPanel', {
                     success: function (response) {
                         var result = Ext.decode(response.responseText);
                         Ext.Msg.alert('Done', 'Deleted ' + (result.deleted || 0) + ' documents.');
-                        view.refreshDocuments();
+                        view.refreshDocuments(1);
                     },
                     failure: function (response) {
                         Ext.Msg.alert('Delete failed', response.responseText || 'Unknown error');
@@ -312,27 +374,52 @@ Ext.define('ElasticLab.view.data.ManageDataPanel', {
             });
     },
 
-    refreshDocuments: function () {
+    refreshDocuments: function (page) {
         var view = this,
             grid = view.down('#documentsGrid'),
-            totalText = view.down('#gridTotal');
+            totalText = view.down('#gridTotal'),
+            pageInfo = view.down('#pageInfo'),
+            prevBtn = view.down('#prevPage'),
+            nextBtn = view.down('#nextPage'),
+            pageSize = view.docPageSize,
+            currentPage = (typeof page === 'number') ? page : (view.docCurrentPage || 1),
+            from = (currentPage - 1) * pageSize;
+
+        view.docCurrentPage = currentPage;
+
         Ext.Ajax.request({
             url: '/api/data',
             method: 'GET',
+            params: { from: from, size: pageSize },
             success: function (response) {
                 var payload = Ext.decode(response.responseText),
-                    hits = (payload && payload.hits) || [];
+                    hits = (payload && payload.hits) || [],
+                    total = (payload && payload.total) || 0,
+                    totalPages = Math.max(1, Math.ceil(total / pageSize));
                 grid.getStore().loadData(hits);
-                if (payload && typeof payload.total !== 'undefined') {
-                    totalText.setText('Total: ' + payload.total + ' (showing up to ' + hits.length + ')');
-                } else {
-                    totalText.setText('');
-                }
+                totalText.setText('Total: ' + total);
+                pageInfo.setText(currentPage + ' / ' + totalPages);
+                prevBtn.setDisabled(currentPage <= 1);
+                nextBtn.setDisabled(currentPage >= totalPages);
             },
             failure: function (response) {
                 Ext.Msg.alert('Load failed', response.responseText || 'Unknown error');
             }
         });
+    },
+
+    showDocumentDetail: function (hit) {
+        var area = this.down('#docArea'),
+            body = this.down('#docDetailBody'),
+            title = this.down('#docDetailTitle'),
+            pretty = Ext.util.Format.htmlEncode(JSON.stringify(hit.source || {}, null, 2));
+        title.setText('ID: ' + (hit.id || ''));
+        body.update('<pre style="margin:0;font-family:monospace;font-size:12px">' + pretty + '</pre>');
+        area.getLayout().setActiveItem(1);
+    },
+
+    showDocumentList: function () {
+        this.down('#docArea').getLayout().setActiveItem(0);
     },
 
     deleteSelectedDocument: function () {

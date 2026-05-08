@@ -31,7 +31,7 @@ Based on the current Elastic mapping arbitrary queries can be built:
 
 #### Result List
 
-* A clickable list of all matching documents
+* A clickable list of matching documents. The full result can be paged through.
 
 #### Result item
 
@@ -53,6 +53,8 @@ Based on the current Elastic mapping arbitrary queries can be built:
     * Number of documents (1-10_000_000)
     * Number of fields per document, random number between min and max (1-50)
     * Depth as in json object levels, min to max. Fields are spread out on all levels. (1-5)
+* All data in the current index can be paged through, displayed as a list of documents on the right side
+* When clicking a document, the same functionality as Search/Query Results/Result item is available 
 * Without inserting anything in Elastic an example document based on current parameters can be generated and displayed
 * Some sort of basic progress indicator should be displayed when working
 * A "Delete all documents" function is available (somehow indicated with red color)

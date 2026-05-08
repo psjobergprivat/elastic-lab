@@ -10,6 +10,8 @@ Ext.define('ElasticLab.view.search.SearchPanel', {
     rootNode: null,
     renderingBuilder: false,
     builderRenderTask: null,
+    searchCurrentPage: 1,
+    searchPageSize: 50,
 
     items: [
         {
@@ -97,6 +99,32 @@ Ext.define('ElasticLab.view.search.SearchPanel', {
                                     xtype: 'grid',
                                     itemId: 'resultsList',
                                     emptyText: 'No results yet.',
+                                    tbar: [
+                                        '->',
+                                        { xtype: 'tbtext', itemId: 'searchTotal', text: '' },
+                                        '-',
+                                        {
+                                            xtype: 'button',
+                                            itemId: 'searchPrevPage',
+                                            text: '◀',
+                                            disabled: true,
+                                            handler: function (btn) {
+                                                var view = btn.up('elasticlab-search');
+                                                view.executeSearch(view.searchCurrentPage - 1);
+                                            }
+                                        },
+                                        { xtype: 'tbtext', itemId: 'searchPageInfo', text: '' },
+                                        {
+                                            xtype: 'button',
+                                            itemId: 'searchNextPage',
+                                            text: '▶',
+                                            disabled: true,
+                                            handler: function (btn) {
+                                                var view = btn.up('elasticlab-search');
+                                                view.executeSearch(view.searchCurrentPage + 1);
+                                            }
+                                        }
+                                    ],
                                     store: { fields: ['id', 'score', 'source'] },
                                     columns: [
                                         { text: 'ID', dataIndex: 'id', width: 260 },
@@ -738,24 +766,42 @@ Ext.define('ElasticLab.view.search.SearchPanel', {
     },
 
     runSearch: function () {
+        this.executeSearch(1);
+    },
+
+    executeSearch: function (page) {
         var me = this,
             grid = me.down('#resultsList'),
-            payload = me.buildRequestPayload();
+            pageSize = me.searchPageSize,
+            payload = Ext.apply(me.buildRequestPayload(), { from: (page - 1) * pageSize, size: pageSize });
+
+        me.searchCurrentPage = page;
         me.showList();
+
         Ext.Ajax.request({
             url: '/api/search',
             method: 'POST',
             jsonData: payload,
             success: function (response) {
                 var data = Ext.decode(response.responseText),
-                    hits = (data && data.hits) || [];
+                    hits = (data && data.hits) || [],
+                    total = (data && data.total) || 0,
+                    totalPages = Math.max(1, Math.ceil(total / pageSize));
                 grid.getStore().loadData(hits);
                 me.updateElasticViewer(data && data.esQuery);
+                me.updateSearchPagination(page, total, totalPages);
             },
             failure: function (response) {
                 Ext.Msg.alert('Search failed', response.responseText || 'Unknown error');
             }
         });
+    },
+
+    updateSearchPagination: function (page, total, totalPages) {
+        this.down('#searchTotal').setText('Total: ' + total);
+        this.down('#searchPageInfo').setText(page + ' / ' + totalPages);
+        this.down('#searchPrevPage').setDisabled(page <= 1);
+        this.down('#searchNextPage').setDisabled(page >= totalPages);
     },
 
     updateElasticViewer: function (esQuery) {
