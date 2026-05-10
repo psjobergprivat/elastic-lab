@@ -10,12 +10,12 @@ hostname,keyword,file:hostnames.csv
 fqdn,keyword,file:hostnames.csv
 status,keyword,file:status_codes.csv
 http_status,keyword,file:status_codes.csv
-zip_code,keyword,file:zip_codes.csv
-postal_code,keyword,file:zip_codes.csv
+zip_code,keyword,langtext:zip_codes
+postal_code,keyword,langtext:zip_codes
 tags,keyword,multi:tags.csv
 labels,keyword,multi:tags.csv
 language,keyword,file:languages.csv
-country_code,keyword,file:country_codes.csv
+country_code,keyword,langtext:country_codes
 title,wildcard,langtext:words
 description,wildcard,langtext:words
 content,wildcard,langtext:words
@@ -63,9 +63,10 @@ properties,flattened,random
 relation,join,random
 phone,wildcard,phone:random
 mobile,wildcard,phone:random
-phone_e164,keyword,phone:e164
+work_phone,wildcard,phone:random
+fax,wildcard,phone:random
 name,wildcard,langtext:words
-street,keyword,file:streets.csv
+street,keyword,langtext:streets
 city,keyword,langtext:cities
 latitude,double,geo:lat
 longitude,double,geo:lon
@@ -96,7 +97,7 @@ error_code,keyword,file:status_codes.csv
 error_message,wildcard,file:english_words.csv
 priority,keyword,file:priorities.csv
 severity,keyword,file:severities.csv
-currency,keyword,file:currencies.csv
+currency,keyword,langtext:currencies
 tax_rate,double,random
 discount,double,random
 date_of_birth,date,random
