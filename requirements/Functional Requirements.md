@@ -9,7 +9,37 @@ The application consists of different areas, represented as separate tabs in the
 
 ## Search
 
-### Query Builder - Left, top part of page
+### Scenarios - Left, top part of page (first tab)
+
+Pre-built search scenarios that demonstrate specific Elasticsearch features. Each scenario shows as a compact card with a title, an info button (ⓘ) that reveals a full description on hover, a pre-filled placeholder showing example inputs, and a Run button.
+
+#### Phone — smart match (libphonenumber)
+
+Phones indexed in any of the phone fields (`phone`, `mobile`, `work_phone`, `fax`) are parsed by libphonenumber into three normalised forms stored in dedicated catchall fields:
+
+* `phone_all_canonical` — E.164 digit string (country code + subscriber), contributed by every phone
+* `phone_all_subscriber` — subscriber digits only (no CC, no trunk), contributed by every phone
+* `phone_all_subscriber_national` — subscriber digits, contributed **only** by phones written in national format
+
+At query time the input is parsed the same way. A **national input** (no `+` or `00` prefix) matches any document that shares the subscriber digits regardless of country or notation. An **international input** matches documents in the same country (via canonical) or any document whose phone was stored in national notation (via subscriber_national); it does not cross country-code boundaries between two internationally-written numbers.
+
+#### Email — smart match (case + tag)
+
+Fields `email` and `secondary_email` copy their raw value to `email_all` at index time. The `email_normalizer` lowercases the address and strips plus-tags from the local part (`alice+news@example.com → alice@example.com`). The same normalisation runs on the query value at search time, so case differences and sub-addressing tags never affect whether a document matches.
+
+#### Phone — any format (digit-strip catchall)
+
+All phone fields copy their raw value to `phone_all`. A char filter strips everything except digits before storing, and the query is normalised the same way. Finds any number regardless of spacing or punctuation. Unlike the smart-match scenario, this does not understand country codes or trunk prefixes.
+
+#### Phone — prefix search (edge ngram)
+
+`phone_all.ngram` indexes every digit prefix of each stored number using edge-ngram tokenisation. Type a partial digit sequence to find all numbers that start with that prefix.
+
+#### Multilingual text
+
+Text fields (`body`, `summary`, `review`, `message`, etc.) are populated from Wikipedia extracts in eight languages (EN, FR, DE, ES, RU, AR, HE, ZH). Try a word in any script.
+
+### Query Builder - Left, top part of page (second tab)
 
 Based on the current Elastic mapping arbitrary queries can be built:
 

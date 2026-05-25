@@ -41,6 +41,23 @@ Key contract in `QueryCompiler`: each `compileX` returns `Optional<Query>`. Empt
 
 There's a Mermaid diagram in `architecture/search-flow-overview.md` that mirrors this; update it if the search flow changes shape.
 
+#### Phone-aware ("smart") matching
+
+Beyond the digit-strip catchall (`phone_all` and `phone_all.ngram`), the index also exposes a four-way phone match. Three top-level catchall fields, populated by `DocumentGenerator` via `PhoneNumberNormalizer` (libphonenumber):
+
+- `phone_all_canonical` — every phone's E.164 digits (CC + national significant number).
+- `phone_all_subscriber` — every phone's national significant number (no CC, no trunk).
+- `phone_all_subscriber_national` — only phones written in **national** form contribute their subscriber here.
+
+A `PropertyNode` with `valueType="phone"` triggers `QueryCompiler.compilePhone`. It parses the input with libphonenumber and emits:
+
+- **National input** (no `+`/`00`): `term phone_all_subscriber == subscriber`. Matches docs in any country sharing the subscriber digits.
+- **International input**: bool should `term phone_all_canonical == fullDigits` OR `term phone_all_subscriber_national == subscriber`. The first matches docs in the same country; the second matches docs that were written in national form (no country implied), without bleeding cross-country between two international docs.
+
+The asymmetry of `phone_all_subscriber_national` is what keeps requirement 4 (intl-X must not match intl-Y) from breaking when two countries happen to share a subscriber number. The frontend exposes this via the "Phone — smart match" scenario in `SearchPanel.scenarios`.
+
+National-format queries need a default region for libphonenumber to interpret trunk prefixes correctly (`8` in Russia, `06` in Hungary, etc.). Configure via `elastic-lab.phone.default-search-region` (optional). Without it, queries fall back to a digit-only heuristic that strips a single leading `0` — fine for most countries but wrong for Russia.
+
 ### Test-data generation
 
 `DataResource` is async: `POST /api/data/generate` returns immediately with `state=running`; the frontend polls `GET /api/data/generate/status`. Concurrency model is a single-thread `ExecutorService` in `TestDataService` plus an `AtomicReference<GenerationStatus>` — only one generation job runs at a time (second request returns 409). Don't introduce a second worker without rethinking that contract.
@@ -50,6 +67,8 @@ The generated index has an explicit mapping built by `MappingBuilder` from `src/
 `TestDataService.deleteAll()` **drops and recreates the index** — it does not delete-by-query. This is the only way to keep the explicit mapping after a wipe.
 
 `DocumentGenerator` picks fields randomly from the catalog, distributes them across `1..maxDepth` JSON object levels, generates values either from CSVs in `testdata/values/` (`file:`, `multi:`), constants (`constant:`), UUIDs, or type-driven random (`random`). Add new field types by extending the `field_catalog.csv` row plus, if the type is unusual, a branch in `DocumentGenerator.generateRandomByType` and `MappingBuilder.matchMappingTypeFor`.
+
+Phone fields (`phone:random`) delegate to `PhoneSampleGenerator` which returns a `PhoneSample(value, region)`. The region travels through `PhoneCatchallCollector` to libphonenumber so that trunk-prefixed national formats (Russia's `8`, France's `0`, UK `(0)…`) normalise correctly. The collector accumulates the three catchall lists and writes them onto the document as `phone_all_canonical`, `phone_all_subscriber`, `phone_all_subscriber_national`.
 
 ### Error mapping
 

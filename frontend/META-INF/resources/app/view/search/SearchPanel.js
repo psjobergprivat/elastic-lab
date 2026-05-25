@@ -13,6 +13,84 @@ Ext.define('ElasticLab.view.search.SearchPanel', {
     searchCurrentPage: 1,
     searchPageSize: 50,
 
+    scenarios: [
+        {
+            id: 'phone_smart',
+            title: 'Phone — smart match (libphonenumber)',
+            description:
+                'Each indexed phone is parsed by libphonenumber into canonical and subscriber forms stored in ' +
+                '<b>phone_all_canonical</b>, <b>phone_all_subscriber</b>, and (for nationally-written numbers) ' +
+                '<b>phone_all_subscriber_national</b>. The query is parsed the same way. <i>National input</i> ' +
+                '(no <code>+</code> or <code>00</code>) matches anything sharing the subscriber digits — any ' +
+                'country, any format. <i>International input</i> matches the same country exactly, or any doc ' +
+                'whose phone was written in national form. International queries never bleed across countries.',
+            placeholder: '+46 70-123 45 67   or   0701234567   or   +44 (0)7700 123456',
+            fieldOptions: ['All phone fields', 'phone', 'mobile', 'work_phone', 'fax'],
+            buildNode: function (val, field) {
+                if (!field || field === 'All phone fields') {
+                    return { kind: 'property', path: '', valueType: 'phone', value: val };
+                }
+                return { kind: 'property', path: field + '.digits', valueType: 'text', value: val };
+            }
+        },
+        {
+            id: 'email_smart',
+            title: 'Email — smart match (case + tag)',
+            description:
+                'Fields <b>email</b> and <b>secondary_email</b> copy their raw value to <b>email_all</b> at index ' +
+                'time. The <b>email_normalizer</b> lowercases the whole address and strips plus-tags from the local ' +
+                'part (<code>alice+news@example.com → alice@example.com</code>). The same normalizer runs on your ' +
+                'query before the term lookup, so case and sub-addressing tags never affect the match.',
+            placeholder: 'alice.smith@example.com   or   Alice.Smith+news@EXAMPLE.COM',
+            fieldOptions: ['All email fields', 'email', 'secondary_email'],
+            buildNode: function (val, field) {
+                if (!field || field === 'All email fields') {
+                    return { kind: 'property', path: '', valueType: 'email', value: val };
+                }
+                return { kind: 'property', path: field, valueType: 'keyword', value: val };
+            }
+        },
+        {
+            id: 'phone_any_format',
+            title: 'Phone — any format (digit-strip catchall)',
+            description:
+                'All phone fields (<b>phone</b>, <b>mobile</b>, <b>work_phone</b>, <b>fax</b>) copy their raw ' +
+                'value to <b>phone_all</b> at index time. A char filter strips everything except digits before ' +
+                'storing. Type a number in any format — the query normalises it the same way and finds the match. ' +
+                'Unlike the smart-match scenario above, this does <i>not</i> understand country codes or trunk ' +
+                'prefixes; <code>0701234567</code> and <code>+46701234567</code> are treated as different strings.',
+            placeholder: '+46 70-123 45 67   or   617-555-0123   or   06.12.34.56.78',
+            buildNode: function (val) {
+                return { kind: 'property', path: 'phone_all', valueType: 'text', value: val };
+            }
+        },
+        {
+            id: 'phone_prefix',
+            title: 'Phone — prefix search (edge ngram)',
+            description:
+                '<b>phone_all.ngram</b> uses edge ngram tokenisation, indexing every digit prefix of each stored ' +
+                'number. The search analyser is <b>phone_digits</b> (not the ngram analyser), so your input is ' +
+                'stripped to digits and matched against those prefixes. Type just the first few digits to find all ' +
+                'numbers that <i>start with</i> that sequence.',
+            placeholder: '0701   or   +1617   or   4670',
+            buildNode: function (val) {
+                return { kind: 'property', path: 'phone_all.ngram', valueType: 'text', value: val };
+            }
+        },
+        {
+            id: 'multilang',
+            title: 'Multilingual text',
+            description:
+                'Text fields such as <b>body</b>, <b>summary</b>, <b>review</b>, and <b>message</b> are sourced ' +
+                'from Wikipedia extracts in 8 languages (EN, FR, DE, ES, RU, AR, HE, ZH). 80 % of documents ' +
+                'are single-language; 20 % mix languages across fields. Try a word in any script.',
+            placeholder: 'Россия   or   مصر   or   ישראל   or   中华   or   République',
+            buildNode: function (val) {
+                return { kind: 'global', value: val };
+            }
+        }
+    ],
+
     items: [
         {
             region: 'north',
@@ -62,11 +140,23 @@ Ext.define('ElasticLab.view.search.SearchPanel', {
                     items: [
                         {
                             region: 'center',
-                            xtype: 'panel',
-                            title: 'Query Builder',
-                            itemId: 'builder',
-                            scrollable: true,
-                            bodyPadding: 6
+                            xtype: 'tabpanel',
+                            deferredRender: false,
+                            items: [
+                                {
+                                    title: 'Query Builder',
+                                    itemId: 'builder',
+                                    scrollable: true,
+                                    bodyPadding: 6
+                                },
+                                {
+                                    title: 'Scenarios',
+                                    itemId: 'scenariosTab',
+                                    scrollable: true,
+                                    bodyPadding: 10,
+                                    layout: { type: 'hbox', align: 'stretch' }
+                                }
+                            ]
                         },
                         {
                             region: 'east',
@@ -106,7 +196,7 @@ Ext.define('ElasticLab.view.search.SearchPanel', {
                                         {
                                             xtype: 'button',
                                             itemId: 'searchPrevPage',
-                                            text: '◀',
+                                            text: '◄',
                                             disabled: true,
                                             handler: function (btn) {
                                                 var view = btn.up('elasticlab-search');
@@ -117,7 +207,7 @@ Ext.define('ElasticLab.view.search.SearchPanel', {
                                         {
                                             xtype: 'button',
                                             itemId: 'searchNextPage',
-                                            text: '▶',
+                                            text: '►',
                                             disabled: true,
                                             handler: function (btn) {
                                                 var view = btn.up('elasticlab-search');
@@ -197,6 +287,7 @@ Ext.define('ElasticLab.view.search.SearchPanel', {
     initialize: function () {
         var me = this;
         me.rootNode = null;
+        me.renderScenarios();
         Ext.Ajax.request({
             url: '/api/metadata/indices',
             method: 'GET',
@@ -216,6 +307,102 @@ Ext.define('ElasticLab.view.search.SearchPanel', {
                 Ext.Msg.alert('Load failed', response.responseText || 'Unknown error');
             }
         });
+    },
+
+    renderScenarios: function () {
+        var me = this,
+            tab = me.down('#scenariosTab');
+        if (!tab) return;
+
+        var leftItems = [], rightItems = [];
+        me.scenarios.forEach(function (scenario, i) {
+            (i % 2 === 0 ? leftItems : rightItems).push(me.buildScenarioCard(scenario));
+        });
+
+        tab.add([
+            { xtype: 'container', flex: 1, margin: '0 4 0 0', layout: { type: 'vbox', align: 'stretch' }, items: leftItems },
+            { xtype: 'container', flex: 1, layout: { type: 'vbox', align: 'stretch' }, items: rightItems }
+        ]);
+    },
+
+    buildScenarioCard: function (scenario) {
+        var me = this,
+            toolbarItems = [
+                {
+                    xtype: 'button',
+                    text: 'ⓘ',
+                    margin: '0 4 0 0',
+                    listeners: {
+                        afterrender: function (btn) {
+                            Ext.create('Ext.tip.ToolTip', {
+                                target: btn.getEl(),
+                                html: '<div style="max-width:450px;line-height:1.6">' + scenario.description + '</div>',
+                                maxWidth: 480,
+                                dismissDelay: 0,
+                                showDelay: 150
+                            });
+                        }
+                    }
+                }
+            ];
+
+        if (scenario.fieldOptions) {
+            toolbarItems.push({
+                xtype: 'combobox',
+                itemId: 'fieldPicker',
+                editable: false,
+                matchFieldWidth: false,
+                store: scenario.fieldOptions,
+                value: scenario.fieldOptions[0]
+            });
+        }
+
+        toolbarItems.push(
+            {
+                xtype: 'textfield',
+                itemId: 'scenarioInput',
+                flex: 1,
+                emptyText: scenario.placeholder,
+                enableKeyEvents: true,
+                listeners: {
+                    specialkey: function (field, e) {
+                        if (e.getKey() !== e.ENTER) return;
+                        var tb = field.up('toolbar'),
+                            picker = tb.down('#fieldPicker');
+                        me.runScenario(scenario, field.getValue(), picker ? picker.getValue() : null);
+                    }
+                }
+            },
+            {
+                text: 'Run',
+                handler: function (btn) {
+                    var tb = btn.up('toolbar'),
+                        input = tb.down('#scenarioInput'),
+                        picker = tb.down('#fieldPicker');
+                    me.runScenario(scenario, input.getValue(), picker ? picker.getValue() : null);
+                }
+            }
+        );
+
+        return {
+            xtype: 'panel',
+            title: scenario.title,
+            margin: '0 0 6 0',
+            bodyPadding: '2 6',
+            items: [{
+                xtype: 'toolbar',
+                border: false,
+                style: 'background:transparent;padding:0',
+                items: toolbarItems
+            }]
+        };
+    },
+
+    runScenario: function (scenario, value, field) {
+        if (!value || !value.trim()) return;
+        this.rootNode = scenario.buildNode(value.trim(), field);
+        this.refreshViewer();
+        this.executeSearch(1);
     },
 
     onIndexSelected: function (name) {

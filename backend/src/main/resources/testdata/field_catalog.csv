@@ -2,8 +2,8 @@ name,type,source
 id,keyword,uuid
 correlation_id,keyword,uuid
 external_id,keyword,uuid
-email,keyword,file:emails.csv
-secondary_email,keyword,file:emails.csv
+email,keyword,email:emails.csv
+secondary_email,keyword,email:emails.csv
 username,keyword,file:usernames.csv
 display_name,keyword,file:usernames.csv
 hostname,keyword,file:hostnames.csv
